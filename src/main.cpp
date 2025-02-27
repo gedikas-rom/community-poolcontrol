@@ -16,7 +16,7 @@
 #define TEMP_WATER_PIN 1    // DS18B20 Datenleitung Wassertemperatur
 #define TEMP_AIR_PIN 0    // DS18B20 Datenleitung Lufttemperatur
 
-#define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 60 seconds 
+#define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
 #define VALVE_INTERVAL 40000 // Valve movement time
 #define PUMP_INTERVAL 5000 // Pump movement time
@@ -60,6 +60,7 @@ typedef struct struct_message_send {
 
 typedef struct struct_message_receive {
   char command[32];
+  char parameter[32];
 } struct_message_receive;
 
 struct_message_send myDataSend;
@@ -215,8 +216,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 // callback function that will be executed when data is received
 void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len) {
   memcpy(&myDataReceive, incomingData, sizeof(myDataReceive));
-  Serial.print("Message: ");
-  Serial.println(myDataReceive.command);
+
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo));
   memcpy(peerInfo.peer_addr, esp_now_info->src_addr, 6);
@@ -247,26 +247,52 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
   esp_err_t err = esp_now_add_peer(&peerInfo);
   if (err == ESP_OK || err == ESP_ERR_ESPNOW_EXIST){
     Serial.println("Received data OK");
-    // Send data as requested
-    myDataSend.averageTempWater = averageTempWater;
-    myDataSend.averageTempAir = averageTempAir;
-    myDataSend.targetTemp = targetTemp;
-    myDataSend.mode = mode;
-    myDataSend.currentValveState = currentValveState;
-    myDataSend.currentPumpState = currentPumpState;
+    Serial.println(myDataReceive.command);
 
-    // Send message via ESP-NOW
-    esp_err_t result = esp_now_send(esp_now_info->src_addr, (uint8_t *) &myDataSend, sizeof(myDataSend));
-    if (result == ESP_OK) {
-      Serial.println("Sent with success");
+    if (strcmp(myDataReceive.command, "get-values") == 0)
+    {
+      // Send data as requested
+      myDataSend.averageTempWater = averageTempWater;
+      myDataSend.averageTempAir = averageTempAir;
+      myDataSend.targetTemp = targetTemp;
+      myDataSend.mode = mode;
+      myDataSend.currentValveState = currentValveState;
+      myDataSend.currentPumpState = currentPumpState;
+
+      // Send message via ESP-NOW
+      esp_err_t result = esp_now_send(esp_now_info->src_addr, (uint8_t *) &myDataSend, sizeof(myDataSend));
+      if (result == ESP_OK) {
+        Serial.println("Sent with success");
+      }
+      else {
+        Serial.println("Error sending the data");
+      }
+    } else if (strcmp(myDataReceive.command, "set-mode") == 0)
+    {
+      if (strcmp(myDataReceive.parameter, "ON") == 0)
+      {
+        mode = ON;
+      } else if (strcmp(myDataReceive.parameter, "OFF") == 0)
+      {
+        mode = OFF;
+      } else if (strcmp(myDataReceive.parameter, "AUTO") == 0)
+      {
+        mode = AUTO;
+      }
     }
-    else {
-      Serial.println("Error sending the data");
-    }
-  } else
+  }
+  else
   {
     Serial.println("Failed to add peer");
-  }
+  } 
+}
+
+bool isValidTemperatureWater(float temp){
+  return temp >= 0 && temp <= 35;
+}
+
+bool isValidTemperatureAir(float temp){
+  return temp >= 0 && temp <= 50;
 }
 
 void readTemperatures(){
@@ -280,8 +306,11 @@ void readTemperatures(){
       Serial.print(i); Serial.print("-Water: "); Serial.println(errt[err]);
     }
 		else{
-      averageTempWater = averageTempWater + currTempWater[i];
-      validMeasures++;
+      if (isValidTemperatureWater(currTempWater[i]))
+      {
+        validMeasures++;
+        averageTempWater = averageTempWater + currTempWater[i];
+      }
 		}
 	}
   if (validMeasures > 0)
@@ -299,9 +328,12 @@ void readTemperatures(){
       Serial.print(j); Serial.print("-Air: "); Serial.println(errt[err]);
     }
 		else{
-      averageTempAir = averageTempAir + currTempAir[j];
-      validMeasures++;
-		}
+      if (isValidTemperatureAir(currTempAir[j]))
+      {
+        averageTempAir = averageTempAir + currTempAir[j];
+        validMeasures++;
+	  	}
+    }
 	}
   if (validMeasures > 0)
     averageTempAir = averageTempAir/validMeasures;
@@ -380,7 +412,7 @@ void handleValveAndPumpControl(String position) {
 
 void handleModes() {
   // Check valid sensor data
-  bool validData =!(averageTempAir < 0 || averageTempAir > 50 || averageTempWater < 0 || averageTempWater > 50); 
+  bool validData =!(averageTempAir < 0 || averageTempWater < 0); 
 
   // Betriebsmodi steuern
   if (mode == ON) {
