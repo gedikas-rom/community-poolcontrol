@@ -333,7 +333,14 @@ void handlePumpControl(uint8_t velocity){
 
 unsigned long lastValveMovement = 0;
 void handleValveAndPumpControl(String position) {
-  if (now - lastValveMovement > VALVE_INTERVAL && currentValveState != OPEN && currentValveState != CLOSED)
+  Serial.printf("position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
+  if (now - lastValveMovement <= VALVE_INTERVAL)
+  {
+    // Ventilbewegung läuft noch 
+    return;
+  }
+
+  if (currentValveState != OPEN && currentValveState != CLOSED)
   {
     digitalWrite(RELAY_POS2, HIGH); // Abschalten nach delay
     digitalWrite(RELAY_POS4, HIGH); // Abschalten nach delay
@@ -344,9 +351,6 @@ void handleValveAndPumpControl(String position) {
     lastValveMovement = 0;
     Serial.printf("position: %s, now: %lu, lastValveMovement: %lu, VALVE_INTERVAL: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL);
     Serial.println("Ventilbewegung endet");
-  } else
-  {
-    return;
   } 
 
   if (position == "Pos2") {
