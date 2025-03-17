@@ -1,15 +1,15 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <esp_now.h>
 #include <WiFi.h>
 #include <OneWireESP32.h>
 #include <LiquidCrystal_PCF8574.h>
+#include <GlobalDefs.h>
 
-#ifndef GLOBALS_H
-#define GLOBALS_H 
+#ifndef GLOBALS_
+#define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.1.0";
+const char* firmware = "0.2.0";
 
 // Pin-Definitionen
 #define BUTTON_PIN 16 // GPIO16 pin connected to button
@@ -38,36 +38,6 @@ uint8_t maxDevicesAir = 3;  // max devices per bus
 const uint8_t maxDevices = 3;  // max devices per bus
 OneWire32 dsWater(TEMP_WATER_PIN);
 OneWire32 dsAir(TEMP_AIR_PIN);
-
-enum ValveState {
-  UNDEFINED,
-  OPENING,
-  OPEN,
-  CLOSING,
-  CLOSED
-};
-
-enum Mode {
-  AUTO,   // automatic mode
-  ON,     // Solar heating on, pump full power
-  OFF     // Solar heating off, pump in eco mode (lowest level)
-};
-
-// ESP-NOW config
-// Define data structure
-typedef struct struct_message_send {
-  float averageTempWater;
-  float averageTempAir;
-  float targetTemp;
-  Mode mode;
-  ValveState currentValveState;
-  int currentPumpState;
-} struct_message_send;
-
-typedef struct struct_message_receive {
-  char command[32];
-  char parameter[32];
-} struct_message_receive;
 
 struct_message_send myDataSend;
 struct_message_receive myDataReceive;
@@ -103,4 +73,5 @@ byte target[] = { 	0b00001, 0b00001, 0b00001, 0b00101,
 
 // WiFi
 WiFiClient espClient;
-#endif // GLOBALS_H
+
+#endif // GLOBALS_

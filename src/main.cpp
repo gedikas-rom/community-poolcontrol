@@ -8,9 +8,13 @@
 #include <UpdateOTA.h>
 #include <Credentials.h>
 #include <Globals.h>
+#include <MQTT_common.h>
                 
 void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+void modeChangedFunction(Mode mode);
+void targetTempChangedFunction(float targetTemp);
+void deltaTempChangedFunction(float deltaTemp);
 
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
@@ -89,6 +93,10 @@ void setup() {
   // Wifi config
   setupWiFi();
 
+  // MQTT config
+  setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction);
+  publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp);
+
   // OTA config
   setupOTA(hostname, []() {
         Serial.println("OTA Start");
@@ -112,7 +120,6 @@ void setup() {
   }
   esp_now_register_recv_cb(OnDataRecv);
   esp_now_register_send_cb(OnDataSent);
-
 }  // setup()
 
 unsigned long now;
@@ -126,6 +133,8 @@ void refreshDisplay();
 void loop() {
   // OTA service loop
   loopOTA();
+  // MQTT service loop
+  loopMQTT();
 
   now = millis();
   if (now - lastDisplayOff > DISPLAY_OFF_INTERVAL) {
@@ -151,6 +160,36 @@ void loop() {
   lastState = currentState;
   
 }  // loop()
+
+// callback when data comes in from mqtt
+void modeChangedFunction(Mode incomingmode) {
+  Serial.printf("Mode changed from %d to %d\n", mode, incomingmode);
+  if (incomingmode == AUTO || incomingmode == ON || incomingmode == OFF)
+  {
+    mode = incomingmode;
+    publishMode(mode);
+  }
+}
+
+void targetTempChangedFunction(float incomingTargetTemp) {
+  Serial.print("Target temperature changed to: ");
+  Serial.println(incomingTargetTemp);
+  if (incomingTargetTemp >= 10 && incomingTargetTemp <= 35)
+  {
+    targetTemp = incomingTargetTemp;
+    publishTargetTemp(targetTemp);
+  }
+}
+
+void deltaTempChangedFunction(float incomingDeltaTemp) {
+  Serial.print("Delta temperature changed to: ");
+  Serial.println(incomingDeltaTemp);
+  if (incomingDeltaTemp > 0 && incomingDeltaTemp <= 10)
+  {
+    deltaTemp = incomingDeltaTemp;
+    publishDeltaTemp(deltaTemp);
+  }
+}
 
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -217,13 +256,13 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
     {
       if (strcmp(myDataReceive.parameter, "ON") == 0)
       {
-        mode = ON;
+        modeChangedFunction(ON);
       } else if (strcmp(myDataReceive.parameter, "OFF") == 0)
       {
-        mode = OFF;
+        modeChangedFunction(OFF);
       } else if (strcmp(myDataReceive.parameter, "AUTO") == 0)
       {
-        mode = AUTO;
+        modeChangedFunction(AUTO);
       }
     }
   }
@@ -285,6 +324,8 @@ void readTemperatures(){
     averageTempAir = averageTempAir/validMeasures;
   else 
     averageTempAir = -1;
+  
+  publishTemperatures(averageTempWater, averageTempAir);
 }
 
 unsigned long lastPumpVelocityChange = 0;
@@ -299,6 +340,7 @@ void handlePumpControl(uint8_t velocity){
     }
     Serial.print("Pumpe schaltet auf...");
     Serial.println(currentPumpState);
+    publishPumpState(currentPumpState);
 
     delay(1000);
     digitalWrite(PUMP_OFF, LOW);
@@ -354,6 +396,7 @@ void handleValveAndPumpControl(String position) {
       }
       handlePumpControl(1);
   }
+  publishValveState(currentValveState);
 }
 
 void handleModes() {
