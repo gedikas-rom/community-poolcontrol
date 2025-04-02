@@ -24,6 +24,14 @@ const char* mqtt_topic_set_mode = "poolcontrol/set/mode";  // topic for setting 
 const char* mqtt_topic_set_targetTemp = "poolcontrol/set/targettemp";  // topic for setting targetTemp
 const char* mqtt_topic_set_deltaTemp = "poolcontrol/set/deltatemp";  // topic for setting deltaTemp
 
+const char* mqtt_topic_PavilionTemp = "poolcontrol/PavilionTemp";  // PavilionTemp
+const char* mqtt_topic_PavilionBattery = "poolcontrol/PavilionBattery";  // PavilionBattery
+const char* mqtt_topic_PavilionFirmware = "poolcontrol/PavilionFirmware";  // PavilionFirmware
+const char* mqtt_topic_GreenhouseTemp = "poolcontrol/GreenhouseTemp";  // GreenhouseTemp
+const char* mqtt_topic_GreenhouseBattery = "poolcontrol/GreenhouseBattery";  // GreenhouseBattery
+const char* mqtt_topic_GreenhouseFirmware = "poolcontrol/GreenhouseFirmware";  // GreenhouseFirmware
+
+
 unsigned long lastMqttReconnectAttempt = 0;
 unsigned long lastWaterLevelCheck = 0;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000; // 5 seconds between reconnect attempts
@@ -89,7 +97,7 @@ bool connectMQTT() {
     
     // Setting Homeassistant sensor config
     Serial.println("--> HA Config");
-    mqtt.setBufferSize(900);
+    mqtt.setBufferSize(1000);
     mqtt.publish(mqtt_topic_ha_firmware.c_str(), mqtt_ha_config_firmware, true);
     mqtt.publish(mqtt_topic_ha_set_mode.c_str(), mqtt_ha_config_set_mode, true);
     mqtt.publish(mqtt_topic_ha_set_targetTemp.c_str(), mqtt_ha_config_set_targetTemp, true);
@@ -101,7 +109,12 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_mode.c_str(), mqtt_ha_config_mode, true);
     mqtt.publish(mqtt_topic_ha_targetTemp.c_str(), mqtt_ha_config_targetTemp, true);
     mqtt.publish(mqtt_topic_ha_deltaTemp.c_str(), mqtt_ha_config_deltaTemp, true);
-
+    mqtt.publish(mqtt_topic_ha_PavilionTemp.c_str(), mqtt_ha_config_PavilionTemp, true);
+    mqtt.publish(mqtt_topic_ha_PavilionBattery.c_str(), mqtt_ha_config_PavilionBattery, true);
+    mqtt.publish(mqtt_topic_ha_PavilionFirmware.c_str(), mqtt_ha_config_PavilionFirmware, true);
+    mqtt.publish(mqtt_topic_ha_GreenhouseTemp.c_str(), mqtt_ha_config_GreenhouseTemp, true);
+    mqtt.publish(mqtt_topic_ha_GreenhouseBattery.c_str(), mqtt_ha_config_GreenhouseBattery, true);
+    mqtt.publish(mqtt_topic_ha_GreenhouseFirmware.c_str(), mqtt_ha_config_GreenhouseFirmware, true);
     Serial.println("<-- HA Config");
 
     return true;
@@ -197,6 +210,38 @@ void publishDeltaTemp(float deltaTemp) {
   char deltaTempStr[10];
   dtostrf(deltaTemp, 1, 1, deltaTempStr);
   mqtt.publish(mqtt_topic_deltaTemp, deltaTempStr, true);
+}
+
+void publishPavilionSensorData(float temp, int battery, const char* firmware) {
+  if (!mqtt.connected()) {
+    return;
+  }
+  Serial.printf("MQTT Update - publishPavilionTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
+  char tempStr[10];
+  dtostrf(temp, 1, 1, tempStr);
+  mqtt.publish(mqtt_topic_PavilionTemp, tempStr, true);
+
+  char batteryStr[5];
+  dtostrf(battery, 1, 1, batteryStr);
+  mqtt.publish(mqtt_topic_PavilionBattery, batteryStr, true);
+
+  mqtt.publish(mqtt_topic_PavilionFirmware, firmware, true);
+}
+
+void publishGreenhouseSensorData(float temp, int battery, const char* firmware) {
+  if (!mqtt.connected()) {
+    return;
+  }
+  Serial.printf("MQTT Update - publishGreenhouseTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
+  char tempStr[10];
+  dtostrf(temp, 1, 1, tempStr);
+  mqtt.publish(mqtt_topic_GreenhouseTemp, tempStr, true);
+
+  char batteryStr[5];
+  dtostrf(battery, 1, 1, batteryStr);
+  mqtt.publish(mqtt_topic_GreenhouseBattery, batteryStr, true);
+
+  mqtt.publish(mqtt_topic_GreenhouseFirmware, firmware, true);
 }
 
 void setupMQTT(WiFiClient& espClient, const char* firmware,     

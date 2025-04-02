@@ -22,9 +22,3 @@ typedef struct struct_message_send {
     ValveState currentValveState;
     int currentPumpState;
   } struct_message_send;
-  
-  typedef struct struct_message_receive {
-    char command[32];
-    char parameter[32];
-  } struct_message_receive;
-    

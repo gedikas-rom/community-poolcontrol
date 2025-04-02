@@ -9,22 +9,22 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.2.0";
+const char* firmware = "0.4.2";
 
 // Pin-Definitionen
 #define BUTTON_PIN 16 // GPIO16 pin connected to button
 #define RELAY_POS2 2    // 3-Wege-Ventil (Position offen = Pos2)
 #define RELAY_POS4 21    // 3-Wege-Ventil (Position zu = Pos4)
-#define PUMP_OFF 18     // Pumpe 
-#define PUMP_1 20     // Pumpenstufe 1
-#define PUMP_2 19     // Pumpenstufe 2
-#define PUMP_3 17     // Pumpenstufe 3
+#define PUMP_OFF 18     // Pumpe red
+#define PUMP_1 20     // Pumpenstufe 1 brown
+#define PUMP_2 19     // Pumpenstufe 2 green
+#define PUMP_3 17     // Pumpenstufe 3 white   
 #define TEMP_WATER_PIN 1    // DS18B20 Datenleitung Wassertemperatur
 #define TEMP_AIR_PIN 0    // DS18B20 Datenleitung Lufttemperatur
 
 #define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
-#define VALVE_INTERVAL 40000 // Valve movement time
+#define VALVE_INTERVAL 70000 // Valve movement time
 #define PUMP_INTERVAL 5000 // Pump movement time
 
 // Variables will change:
@@ -40,7 +40,6 @@ OneWire32 dsWater(TEMP_WATER_PIN);
 OneWire32 dsAir(TEMP_AIR_PIN);
 
 struct_message_send myDataSend;
-struct_message_receive myDataReceive;
 
 uint64_t addrWater[maxDevices];
 uint64_t addrAir[maxDevices];

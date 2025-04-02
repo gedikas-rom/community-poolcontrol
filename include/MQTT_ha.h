@@ -18,6 +18,13 @@ std::string mqtt_topic_ha_mode = std::string(mqtt_topic_ha_base) + "/sensor/pool
 std::string mqtt_topic_ha_targetTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/targetTemp/config";
 std::string mqtt_topic_ha_deltaTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/deltaTemp/config";
 
+std::string mqtt_topic_ha_PavilionTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/PavilionTemp/config";
+std::string mqtt_topic_ha_PavilionBattery = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/PavilionBattery/config";
+std::string mqtt_topic_ha_PavilionFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/PavilionFirmware/config";
+std::string mqtt_topic_ha_GreenhouseTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseTemp/config";
+std::string mqtt_topic_ha_GreenhouseBattery = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseBattery/config";
+std::string mqtt_topic_ha_GreenhouseFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseFirmware/config";
+
 
 const char* mqtt_ha_config_firmware = R"rawliteral({
   "availability": [
@@ -362,5 +369,185 @@ const char* mqtt_ha_config_deltaTemp = R"rawliteral({
   "state_topic": "poolcontrol/DeltaTemp",
   "unit_of_measurement": "K",
   "unique_id": "poolcontrol_deltaTemp",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_PavilionTemp = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "name": "Pavillion Temperatur",
+  "object_id": "poolcontrol_PavilionTemp",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/PavilionTemp",
+  "unit_of_measurement": "°C",
+  "unique_id": "poolcontrol_PavilionTemp",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_PavilionBattery = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "battery",
+  "entity_category": "diagnostic",
+  "name": "Pavillion Batterie",
+  "object_id": "poolcontrol_PavilionBattery",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/PavilionBattery",
+  "unit_of_measurement": "%",
+  "unique_id": "poolcontrol_PavilionBattery",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_PavilionFirmware = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "entity_category": "diagnostic",
+  "name": "Pavillion Firmware",
+  "object_id": "poolcontrol_PavilionFirmware",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/PavilionFirmware",
+  "unique_id": "poolcontrol_PavilionFirmware",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_GreenhouseTemp = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "name": "Gewächshaus Temperatur",
+  "object_id": "poolcontrol_GreenhouseTemp",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/GreenhouseTemp",
+  "unit_of_measurement": "°C",
+  "unique_id": "poolcontrol_GreenhouseTemp",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_GreenhouseBattery = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "battery",
+  "entity_category": "diagnostic",
+  "name": "Gewächshaus Batterie",
+  "object_id": "poolcontrol_GreenhouseBattery",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/GreenhouseBattery",
+  "unit_of_measurement": "%",
+  "unique_id": "poolcontrol_GreenhouseBattery",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_GreenhouseFirmware = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "entity_category": "diagnostic",
+  "name": "Gewächshaus Firmware",
+  "object_id": "poolcontrol_GreenhouseFirmware",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/GreenhouseFirmware",
+  "unique_id": "poolcontrol_GreenhouseFirmware",
   "value_template": "{{ value }}"
 })rawliteral";

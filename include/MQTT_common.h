@@ -12,3 +12,5 @@ void publishPumpState(int state);
 void publishMode(Mode mode);
 void publishTargetTemp(float targetTemp);
 void publishDeltaTemp(float deltaTemp);
+void publishPavilionSensorData(float temp, int battery, const char* firmware);
+void publishGreenhouseSensorData(float temp, int battery, const char* firmware);

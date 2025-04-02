@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <LiquidCrystal_PCF8574.h>
 #include <OneWireESP32.h>
@@ -34,8 +35,14 @@ void setup() {
   int error;
 
   Serial.begin(115200);
-  Serial.println("LCD...");
-  Serial.println("Probing for PCF8574 on address 0x27...");
+  // turn on the external antenna
+  pinMode(3, OUTPUT);
+  digitalWrite(3, LOW); //turn on this function
+  delay(100);
+  pinMode(14, OUTPUT); 
+  digitalWrite(14, HIGH);//use external antenna  
+  Serial.println("External antenna enabled");
+  Serial.println("LCD...Probing for PCF8574 on address 0x27...");
 
   // See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device.
   Wire.begin();
@@ -200,7 +207,16 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 // callback function that will be executed when data is received
 void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len) {
-  memcpy(&myDataReceive, incomingData, sizeof(myDataReceive));
+	String payload;
+	payload.reserve(len);
+	for(auto i = 0; i < len; i++)
+	{
+		payload += (char)incomingData[i];
+	}
+
+	JsonDocument doc;
+	DeserializationError error = deserializeJson(doc, payload);
+	if(error) { Serial.print("Error receiving data. Bad response"); return; }
 
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo));
@@ -231,10 +247,10 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
 
   esp_err_t err = esp_now_add_peer(&peerInfo);
   if (err == ESP_OK || err == ESP_ERR_ESPNOW_EXIST){
-    Serial.println("Received data OK");
-    Serial.println(myDataReceive.command);
+    String cmd = doc["cmd"];
+    Serial.printf("Received data OK: cmd: %s\n", cmd);
 
-    if (strcmp(myDataReceive.command, "get-values") == 0)
+    if (cmd == "get-values")
     {
       // Send data as requested
       myDataSend.averageTempWater = averageTempWater;
@@ -252,17 +268,45 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
       else {
         Serial.println("Error sending the data");
       }
-    } else if (strcmp(myDataReceive.command, "set-mode") == 0)
+    } else if (cmd == "set-mode")
     {
-      if (strcmp(myDataReceive.parameter, "ON") == 0)
+      String mode = doc["mode"];
+      if (mode == "ON")
       {
         modeChangedFunction(ON);
-      } else if (strcmp(myDataReceive.parameter, "OFF") == 0)
+      } else if (mode == "OFF")
       {
         modeChangedFunction(OFF);
-      } else if (strcmp(myDataReceive.parameter, "AUTO") == 0)
+      } else if (mode == "AUTO")
       {
         modeChangedFunction(AUTO);
+      }
+    } else if (cmd == "set-targettemp")
+    {
+      float targetTemp = doc["targetTemp"];
+      targetTempChangedFunction(targetTemp);
+    } else if (cmd == "set-deltatemp")
+    {
+      float deltaTemp = doc["deltaTemp"];
+      deltaTempChangedFunction(deltaTemp);
+    } else if (cmd == "set-sensordata")
+    {
+      if (doc["sensor"] == "temperature")
+      {
+        if (doc["location"] == "pavilion")
+        {
+          float value = doc["value"];
+          int battery = doc["battery"];
+          const char* firmware = doc["firmware"];
+          publishPavilionSensorData(value, battery, firmware);
+        }
+        else if (doc["location"] == "greenhouse")
+        {
+          float value = doc["value"];
+          int battery = doc["battery"];
+          const char* firmware = doc["firmware"];
+          publishGreenhouseSensorData(value, battery, firmware);
+        }
       }
     }
   }
@@ -383,7 +427,7 @@ void handleValveAndPumpControl(String position) {
         lastValveMovement = now;
         currentValveState = OPENING;
       }
-      handlePumpControl(3); // Oder Stufe3 basierend auf Bedingungen
+      handlePumpControl(2); // Oder Stufe2 basierend auf Bedingungen
   } else if (position == "Pos4") {
       // Kleiner Kreislauf aktivieren
       if (currentValveState != CLOSED)
