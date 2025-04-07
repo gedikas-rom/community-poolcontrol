@@ -17,18 +17,49 @@ void modeChangedFunction(Mode mode);
 void targetTempChangedFunction(float targetTemp);
 void deltaTempChangedFunction(float deltaTemp);
 
+void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("Disconnected from WiFi access point");
+  Serial.print("WiFi lost connection. Reason: ");
+  Serial.println(info.wifi_sta_disconnected.reason);
+  Serial.println("Trying to Reconnect");
+  WiFi.begin(WIFI_ssid, WIFI_password);
+}
+
+void WiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("Connected to AP successfully!");
+}
+
+void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("MAC-Address: ");
+  Serial.println(WiFi.macAddress());
+}
+
+unsigned long lastWiFiCheck = 0;
+void checkWiFi()
+{
+  unsigned long now = millis();
+  if ((WiFi.status() != WL_CONNECTED) && (now - lastWiFiCheck >= WIFI_RECONNECT_INTERVAL)) {
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.reconnect();
+    lastWiFiCheck = now;
+  }
+}
+
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.hostname(hostname);
-  WiFi.begin(WIFI_ssid, WIFI_password);
+  WiFi.disconnect(true);
+  delay(1000);
   
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
-  Serial.println("Connected to the WiFi network");
-  Serial.print("MAC-Address: ");
-  Serial.println(WiFi.macAddress());
+  WiFi.onEvent(WiFiConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
+  WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.onEvent(WiFiDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+  WiFi.begin(WIFI_ssid, WIFI_password);
 }
 
 void setup() {
@@ -142,6 +173,8 @@ void loop() {
   loopOTA();
   // MQTT service loop
   loopMQTT();
+  // check WiFi status
+  checkWiFi();
 
   now = millis();
   if (now - lastDisplayOff > DISPLAY_OFF_INTERVAL) {
@@ -474,6 +507,15 @@ void printStatusBar(){
     case OFF: lcd.print("Manuell - AUS"); break;
     case AUTO: lcd.print("AUTO"); break;
   }
+  // WiFi Status
+  lcd.setCursor(17, 3);
+  Serial.printf("WiFi signal: %d\n", WiFi.RSSI());
+  if (WiFi.status() == WL_CONNECTED)
+    lcd.print("\03");
+  else
+    lcd.print("\01");
+
+  // ESP-NOW Status
   lcd.setCursor(19, 3);
   if (lastESPNOWRequest > 0 && now - lastESPNOWRequest < 20000)
     lcd.print("\06");

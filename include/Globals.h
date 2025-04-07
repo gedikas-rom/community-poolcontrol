@@ -9,7 +9,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.4.2";
+const char* firmware = "0.5.3";
 
 // Pin-Definitionen
 #define BUTTON_PIN 16 // GPIO16 pin connected to button
@@ -24,6 +24,7 @@ const char* firmware = "0.4.2";
 
 #define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
+#define WIFI_RECONNECT_INTERVAL 5000
 #define VALVE_INTERVAL 70000 // Valve movement time
 #define PUMP_INTERVAL 5000 // Pump movement time
 
