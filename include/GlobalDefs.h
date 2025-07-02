@@ -7,9 +7,10 @@ enum ValveState {
   };
   
 enum Mode {
-    AUTO,   // automatic mode
-    ON,     // Solar heating on, pump full power
-    OFF     // Solar heating off, pump in eco mode (lowest level)
+    AUTO,         // automatic mode
+    ON,           // Solar heating on, pump full power
+    OFF,          // Solar heating off, pump in eco mode (lowest level)
+    CLEANING     // Solar heating off, pump full power for max cleaning
   };
 
 // ESP-NOW config

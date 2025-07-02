@@ -19,10 +19,14 @@ const char* mqtt_topic_TempWater = "poolcontrol/TempWater";  // averageTempWater
 const char* mqtt_topic_TempAir = "poolcontrol/TempAir";  // averageTempAir
 const char* mqtt_topic_targetTemp = "poolcontrol/TargetTemp";  // targetTemp
 const char* mqtt_topic_deltaTemp = "poolcontrol/DeltaTemp";  // deltaTemp
+const char* mqtt_topic_offsetWater = "poolcontrol/offsetWater";  // offsetWater
+const char* mqtt_topic_offsetAir = "poolcontrol/offsetAir";  // offsetAir
 
 const char* mqtt_topic_set_mode = "poolcontrol/set/mode";  // topic for setting mode
 const char* mqtt_topic_set_targetTemp = "poolcontrol/set/targettemp";  // topic for setting targetTemp
 const char* mqtt_topic_set_deltaTemp = "poolcontrol/set/deltatemp";  // topic for setting deltaTemp
+const char* mqtt_topic_set_offsetWater = "poolcontrol/set/offsetWater";  // topic for setting offsetWater
+const char* mqtt_topic_set_offsetAir = "poolcontrol/set/offsetAir";  // topic for setting offsetAir
 
 const char* mqtt_topic_PavilionTemp = "poolcontrol/PavilionTemp";  // PavilionTemp
 const char* mqtt_topic_PavilionBattery = "poolcontrol/PavilionBattery";  // PavilionBattery
@@ -40,9 +44,12 @@ const char* _firmware;
 void (*_modeChangedFunction)(Mode mode);  
 void (*_targetTempChangedFunction)(float targetTemp);
 void (*_deltaTempChangedFunction)(float deltaTemp);
+void (*_offsetWaterChangedFunction)(float offsetWater);
+void (*_offsetAirChangedFunction)(float offsetAir);
 
 void publishValveState(ValveState state);
 void publishPumpState(int state);
+void publishMode(Mode mode);
 
 // MQTT Callback für eingehende Nachrichten
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -59,11 +66,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       _modeChangedFunction(ON);
     } else if (String(message) == "OFF") {
       _modeChangedFunction(OFF);
+    } else if (String(message) == "CLEANING") {
+      _modeChangedFunction(CLEANING);
     }
   } else if (String(topic) == mqtt_topic_set_targetTemp) {
     _targetTempChangedFunction(atof(message));
   } else if (String(topic) == mqtt_topic_set_deltaTemp) {
     _deltaTempChangedFunction(atof(message));
+  } else if (String(topic) == mqtt_topic_set_offsetWater) {
+    _offsetWaterChangedFunction(atof(message));
+  } else if (String(topic) == mqtt_topic_set_offsetAir) {
+    _offsetAirChangedFunction(atof(message));
   }
 }
 
@@ -94,6 +107,8 @@ bool connectMQTT() {
     mqtt.subscribe(mqtt_topic_set_mode);
     mqtt.subscribe(mqtt_topic_set_targetTemp);
     mqtt.subscribe(mqtt_topic_set_deltaTemp);
+    mqtt.subscribe(mqtt_topic_set_offsetWater);
+    mqtt.subscribe(mqtt_topic_set_offsetAir);
     
     // Setting Homeassistant sensor config
     Serial.println("--> HA Config");
@@ -102,6 +117,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_set_mode.c_str(), mqtt_ha_config_set_mode, true);
     mqtt.publish(mqtt_topic_ha_set_targetTemp.c_str(), mqtt_ha_config_set_targetTemp, true);
     mqtt.publish(mqtt_topic_ha_set_deltaTemp.c_str(), mqtt_ha_config_set_deltaTemp, true);
+    mqtt.publish(mqtt_topic_ha_set_offsetWater.c_str(), mqtt_ha_config_set_offsetWater, true);
+    mqtt.publish(mqtt_topic_ha_set_offsetAir.c_str(), mqtt_ha_config_set_offsetAir, true);
     mqtt.publish(mqtt_topic_ha_TempWater.c_str(), mqtt_ha_config_TempWater, true);
     mqtt.publish(mqtt_topic_ha_TempAir.c_str(), mqtt_ha_config_TempAir, true);
     mqtt.publish(mqtt_topic_ha_ValveState.c_str(), mqtt_ha_config_ValveState, true);
@@ -109,6 +126,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_mode.c_str(), mqtt_ha_config_mode, true);
     mqtt.publish(mqtt_topic_ha_targetTemp.c_str(), mqtt_ha_config_targetTemp, true);
     mqtt.publish(mqtt_topic_ha_deltaTemp.c_str(), mqtt_ha_config_deltaTemp, true);
+    mqtt.publish(mqtt_topic_ha_offsetWater.c_str(), mqtt_ha_config_offsetWater, true);
+    mqtt.publish(mqtt_topic_ha_offsetAir.c_str(), mqtt_ha_config_offsetAir, true);
     mqtt.publish(mqtt_topic_ha_PavilionTemp.c_str(), mqtt_ha_config_PavilionTemp, true);
     mqtt.publish(mqtt_topic_ha_PavilionBattery.c_str(), mqtt_ha_config_PavilionBattery, true);
     mqtt.publish(mqtt_topic_ha_PavilionFirmware.c_str(), mqtt_ha_config_PavilionFirmware, true);
@@ -127,14 +146,17 @@ bool connectMQTT() {
 
 float lasttargetTemp = -1;
 float lastdeltaTemp = -1;
+float lastoffsetWater = -100;
+float lastoffsetAir = -100;
 
-void publishPreferences(Mode mode, ValveState valvestate, int state, float targetTemp, float deltaTemp) {
+void publishPreferences(Mode mode, ValveState valvestate, int state, float targetTemp, float deltaTemp, float offsetWater, float offsetAir) {
   if (!mqtt.connected()) {
     return;
   }
 
-  Serial.printf("MQTT Update - publishPreferences: Mode: %d, TargetTemp: %.1f, DeltaTemp: %.1f\n", mode, targetTemp, deltaTemp);
-  mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : "OFF", true);
+  Serial.printf("MQTT Update - publishPreferences: Mode: %d, TargetTemp: %.1f, DeltaTemp: %.1f, OffsetWater: %.1f, OffsetAir: %.1f\n", mode, targetTemp, deltaTemp, offsetWater, offsetAir);
+  publishMode(mode);
+  //mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : "OFF", true);
 
   if (lasttargetTemp != targetTemp) {
     char targetTempStr[10];
@@ -148,6 +170,19 @@ void publishPreferences(Mode mode, ValveState valvestate, int state, float targe
     mqtt.publish(mqtt_topic_deltaTemp, deltaTempStr, true);
     lastdeltaTemp = deltaTemp;
   }
+  if (lastoffsetWater != offsetWater) {
+    char offsetWaterStr[10];
+    dtostrf(offsetWater, 1, 1, offsetWaterStr);
+    mqtt.publish(mqtt_topic_offsetWater, offsetWaterStr, true);
+    lastoffsetWater = offsetWater;
+  }
+  if (lastoffsetAir != offsetAir) {
+    char offsetAirStr[10];
+    dtostrf(offsetAir, 1, 1, offsetAirStr);
+    mqtt.publish(mqtt_topic_offsetAir, offsetAirStr, true);
+    lastoffsetAir = offsetAir;
+  }
+
   publishValveState(valvestate);
   publishPumpState(state);
 }
@@ -189,7 +224,7 @@ void publishMode(Mode mode) {
     return;
   }
   Serial.printf("MQTT Update - publishMode: %d\n", mode);
-  mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : "OFF", true);
+  mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : mode == OFF ? "OFF" : "CLEANING", true);
 }
 
 void publishTargetTemp(float targetTemp) {
@@ -210,6 +245,26 @@ void publishDeltaTemp(float deltaTemp) {
   char deltaTempStr[10];
   dtostrf(deltaTemp, 1, 1, deltaTempStr);
   mqtt.publish(mqtt_topic_deltaTemp, deltaTempStr, true);
+}
+
+void publishOffsetWater(float offsetWater) {
+  if (!mqtt.connected()) {
+    return;
+  }
+  Serial.printf("MQTT Update - publishOffsetWater: %.1f\n", offsetWater);
+  char offsetWaterStr[10];
+  dtostrf(offsetWater, 1, 1, offsetWaterStr);
+  mqtt.publish(mqtt_topic_offsetWater, offsetWaterStr, true);
+}
+
+void publishOffsetAir(float offsetAir) {
+  if (!mqtt.connected()) {
+    return;
+  }
+  Serial.printf("MQTT Update - publishOffsetAir: %.1f\n", offsetAir);
+  char offsetAirStr[10];
+  dtostrf(offsetAir, 1, 1, offsetAirStr);
+  mqtt.publish(mqtt_topic_offsetAir, offsetAirStr, true);
 }
 
 void publishPavilionSensorData(float temp, int battery, const char* firmware) {
@@ -247,11 +302,15 @@ void publishGreenhouseSensorData(float temp, int battery, const char* firmware) 
 void setupMQTT(WiFiClient& espClient, const char* firmware,     
     void (*modeChangedFunction)(Mode mode),
     void (*targetTempChangedFunction)(float targetTemp),
-    void (*deltaTempChangedFunction)(float deltaTemp))  
+    void (*deltaTempChangedFunction)(float deltaTemp),
+    void (*offsetWaterChangedFunction)(float offsetWater),
+    void (*offsetAirChangedFunction)(float offsetAir)) 
 {
     _modeChangedFunction = modeChangedFunction;
     _targetTempChangedFunction = targetTempChangedFunction;
     _deltaTempChangedFunction = deltaTempChangedFunction;
+    _offsetWaterChangedFunction = offsetWaterChangedFunction;
+    _offsetAirChangedFunction = offsetAirChangedFunction;
     _firmware = firmware;
     mqtt.setClient(espClient);
     mqtt.setServer(mqtt_server, mqtt_port);

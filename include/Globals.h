@@ -9,7 +9,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.5.3";
+const char* firmware = "0.8.0";
 
 // Pin-Definitionen
 #define BUTTON_PIN 16 // GPIO16 pin connected to button
@@ -21,6 +21,9 @@ const char* firmware = "0.5.3";
 #define PUMP_3 17     // Pumpenstufe 3 white   
 #define TEMP_WATER_PIN 1    // DS18B20 Datenleitung Wassertemperatur
 #define TEMP_AIR_PIN 0    // DS18B20 Datenleitung Lufttemperatur
+#define PUMPLEVEL_ECO 1  // Pump level 1 = eco
+#define PUMPLEVEL_FULL 2    // Pump level 2 = full power
+#define PUMPLEVEL_CLEANING 2 // Pump level 2 = cleaning mode
 
 #define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
@@ -48,6 +51,8 @@ float currTempWater[maxDevices];
 float currTempAir[maxDevices];
 float averageTempWater = -1;
 float averageTempAir = -1;
+float offsetWater = 1.5f; // Offset for water temperature
+float offsetAir = 0.0f; // Offset for air temperature
 float targetTemp = 25.0f; // Target water temperature
 float deltaTemp = 2.0f; // Temp delta to prevent many valve switching
 ValveState currentValveState = UNDEFINED;

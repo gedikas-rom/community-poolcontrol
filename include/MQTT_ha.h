@@ -9,6 +9,8 @@ std::string mqtt_topic_ha_firmware = std::string(mqtt_topic_ha_base) + "/sensor/
 std::string mqtt_topic_ha_set_mode = std::string(mqtt_topic_ha_base) + "/select/poolcontrol/mode/config";
 std::string mqtt_topic_ha_set_targetTemp = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/targetTemp/config";
 std::string mqtt_topic_ha_set_deltaTemp = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/deltaTemp/config";
+std::string mqtt_topic_ha_set_offsetWater = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/offsetWater/config";
+std::string mqtt_topic_ha_set_offsetAir = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/offsetAir/config";
 
 std::string mqtt_topic_ha_TempWater = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempWater/config";
 std::string mqtt_topic_ha_TempAir = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempAir/config";
@@ -17,6 +19,8 @@ std::string mqtt_topic_ha_PumpState = std::string(mqtt_topic_ha_base) + "/sensor
 std::string mqtt_topic_ha_mode = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/mode/config";
 std::string mqtt_topic_ha_targetTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/targetTemp/config";
 std::string mqtt_topic_ha_deltaTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/deltaTemp/config";
+std::string mqtt_topic_ha_offsetWater = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/offsetWater/config";
+std::string mqtt_topic_ha_offsetAir = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/offsetAir/config";
 
 std::string mqtt_topic_ha_PavilionTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/PavilionTemp/config";
 std::string mqtt_topic_ha_PavilionBattery = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/PavilionBattery/config";
@@ -79,7 +83,8 @@ const char* mqtt_ha_config_set_mode = R"rawliteral({
   "options": [
     "AUTO",
     "ON",
-    "OFF"
+    "OFF",
+    "CLEANING"
   ],
   "origin": {
     "name": "ESP32-C6",
@@ -158,6 +163,80 @@ const char* mqtt_ha_config_set_deltaTemp = R"rawliteral({
   "state_topic": "poolcontrol/DeltaTemp",
   "unit_of_measurement": "K",
   "unique_id": "poolcontrol_set_deltaTemp",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_set_offsetWater = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "command_topic": "poolcontrol/set/offsetWater",
+  "mode": "slider",
+  "min": -5,
+  "max": 5,
+  "step": 0.1,
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "entity_category": "config",
+  "icon": "mdi:tune",
+  "name": "Offset Wassertemperatur",
+  "object_id": "poolcontrol_set_offsetWater",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/offsetWater",
+  "unit_of_measurement": "",
+  "unique_id": "poolcontrol_set_offsetWater",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_set_offsetAir = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "command_topic": "poolcontrol/set/offsetAir",
+  "mode": "slider",
+  "min": -5,
+  "max": 5,
+  "step": 0.1,
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "entity_category": "config",
+  "icon": "mdi:tune",
+  "name": "Offset Lufttemperatur",
+  "object_id": "poolcontrol_set_offsetAir",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/offsetAir",
+  "unit_of_measurement": "",
+  "unique_id": "poolcontrol_set_offsetAir",
   "value_template": "{{ value }}"
 })rawliteral";
 
@@ -369,6 +448,70 @@ const char* mqtt_ha_config_deltaTemp = R"rawliteral({
   "state_topic": "poolcontrol/DeltaTemp",
   "unit_of_measurement": "K",
   "unique_id": "poolcontrol_deltaTemp",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_offsetWater = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "entity_category": "diagnostic",
+  "icon": "mdi:tune",
+  "name": "Offset Wassertemperatur",
+  "object_id": "poolcontrol_offsetWater",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/offsetWater",
+  "unit_of_measurement": "",
+  "unique_id": "poolcontrol_offsetWater",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_offsetAir = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "device_class": "temperature",
+  "entity_category": "diagnostic",
+  "icon": "mdi:tune",
+  "name": "Offset Lufttemperatur",
+  "object_id": "poolcontrol_offsetAir",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/offsetAir",
+  "unit_of_measurement": "",
+  "unique_id": "poolcontrol_offsetAir",
   "value_template": "{{ value }}"
 })rawliteral";
 

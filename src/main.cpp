@@ -16,6 +16,8 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void modeChangedFunction(Mode mode);
 void targetTempChangedFunction(float targetTemp);
 void deltaTempChangedFunction(float deltaTemp);
+void offsetWaterChangedFunction(float offsetWater);
+void offsetAirChangedFunction(float offsetAir);
 
 void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("Disconnected from WiFi access point");
@@ -120,10 +122,10 @@ void setup() {
   // Relais und Pumpe initial ausschalten
   digitalWrite(RELAY_POS2, HIGH);
   digitalWrite(RELAY_POS4, HIGH);
-  digitalWrite(PUMP_OFF, LOW);
-  digitalWrite(PUMP_1, LOW);
-  digitalWrite(PUMP_2, LOW);
-  digitalWrite(PUMP_3, LOW);
+  digitalWrite(PUMP_OFF, HIGH);
+  digitalWrite(PUMP_1, HIGH);
+  digitalWrite(PUMP_2, HIGH);
+  digitalWrite(PUMP_3, HIGH);
 
   // Button init
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -132,8 +134,9 @@ void setup() {
   setupWiFi();
 
   // MQTT config
-  setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction);
-  publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp);
+  setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction, 
+    offsetWaterChangedFunction, offsetAirChangedFunction);
+  publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp, offsetWater, offsetAir);
 
   // OTA config
   setupOTA(hostname, []() {
@@ -204,11 +207,8 @@ void loop() {
 // callback when data comes in from mqtt
 void modeChangedFunction(Mode incomingmode) {
   Serial.printf("Mode changed from %d to %d\n", mode, incomingmode);
-  if (incomingmode == AUTO || incomingmode == ON || incomingmode == OFF)
-  {
-    mode = incomingmode;
-    publishMode(mode);
-  }
+  mode = incomingmode;
+  publishMode(mode);
 }
 
 void targetTempChangedFunction(float incomingTargetTemp) {
@@ -228,6 +228,26 @@ void deltaTempChangedFunction(float incomingDeltaTemp) {
   {
     deltaTemp = incomingDeltaTemp;
     publishDeltaTemp(deltaTemp);
+  }
+}
+
+void offsetWaterChangedFunction(float incomingOffsetWater) {
+  Serial.print("Offset water temperature changed to: ");
+  Serial.println(incomingOffsetWater);
+  if (incomingOffsetWater >= -5 && incomingOffsetWater <= 5)
+  {
+    offsetWater = incomingOffsetWater;
+    publishOffsetWater(offsetWater);
+  }
+}
+
+void offsetAirChangedFunction(float incomingOffsetAir) {
+  Serial.print("Offset air temperature changed to: ");
+  Serial.println(incomingOffsetAir);
+  if (incomingOffsetAir >= -5 && incomingOffsetAir <= 5)
+  {
+    offsetAir = incomingOffsetAir;
+    publishOffsetAir(offsetAir);
   }
 }
 
@@ -310,6 +330,9 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
       } else if (mode == "OFF")
       {
         modeChangedFunction(OFF);
+      } else if (mode == "CLEANING")
+      {
+        modeChangedFunction(CLEANING);
       } else if (mode == "AUTO")
       {
         modeChangedFunction(AUTO);
@@ -322,6 +345,14 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
     {
       float deltaTemp = doc["deltaTemp"];
       deltaTempChangedFunction(deltaTemp);
+    } else if (cmd == "set-offsetwater")
+    {
+      float offsetWater = doc["offsetWater"];
+      offsetWaterChangedFunction(offsetWater);
+    } else if (cmd == "set-offsetair")
+    {
+      float offsetAir = doc["offsetAir"];
+      offsetAirChangedFunction(offsetAir);
     } else if (cmd == "set-sensordata")
     {
       if (doc["sensor"] == "temperature")
@@ -376,7 +407,7 @@ void readTemperatures(){
 		}
 	}
   if (validMeasures > 0)
-    averageTempWater = averageTempWater/validMeasures;
+    averageTempWater = averageTempWater/validMeasures + offsetWater;
   else 
     averageTempWater = -1;
 
@@ -398,7 +429,7 @@ void readTemperatures(){
     }
 	}
   if (validMeasures > 0)
-    averageTempAir = averageTempAir/validMeasures;
+    averageTempAir = averageTempAir/validMeasures + offsetAir;
   else 
     averageTempAir = -1;
   
@@ -410,20 +441,20 @@ void handlePumpControl(uint8_t velocity){
   if (now - lastPumpVelocityChange > PUMP_INTERVAL && currentPumpState != velocity)
   {
     switch(velocity) {
-      case 0: digitalWrite(PUMP_OFF, HIGH); currentPumpState = 0; break; // Pumpe stoppen
-      case 1: digitalWrite(PUMP_1, HIGH); currentPumpState = 1; break; // Stufe 1 = eco
-      case 2: digitalWrite(PUMP_2, HIGH); currentPumpState = 2; break; // Stufe 2
-      case 3: digitalWrite(PUMP_3, HIGH); currentPumpState = 3; break; // Stufe 3
+      case 0: digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Pumpe stoppen
+      case 1: digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Stufe 1 = eco
+      case 2: digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Stufe 2
+      case 3: digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Stufe 3
     }
     Serial.print("Pumpe schaltet auf...");
     Serial.println(currentPumpState);
     publishPumpState(currentPumpState);
 
-    delay(1000);
-    digitalWrite(PUMP_OFF, LOW);
-    digitalWrite(PUMP_1, LOW);
-    digitalWrite(PUMP_2, LOW);
-    digitalWrite(PUMP_3, LOW);
+    delay(2000);
+    digitalWrite(PUMP_OFF, HIGH);
+    digitalWrite(PUMP_1, HIGH);
+    digitalWrite(PUMP_2, HIGH);
+    digitalWrite(PUMP_3, HIGH);
     lastPumpVelocityChange = now;
   }
 }
@@ -460,7 +491,7 @@ void handleValveAndPumpControl(String position) {
         lastValveMovement = now;
         currentValveState = OPENING;
       }
-      handlePumpControl(2); // Oder Stufe2 basierend auf Bedingungen
+      handlePumpControl(PUMPLEVEL_FULL); // Oder Stufe2 basierend auf Bedingungen
   } else if (position == "Pos4") {
       // Kleiner Kreislauf aktivieren
       if (currentValveState != CLOSED)
@@ -471,7 +502,10 @@ void handleValveAndPumpControl(String position) {
         lastValveMovement = now;
         currentValveState = CLOSING;
       }
-      handlePumpControl(1);
+      if (mode == CLEANING)
+        handlePumpControl(PUMPLEVEL_CLEANING); // Pump full power for cleaning
+      else
+        handlePumpControl(PUMPLEVEL_ECO);
   }
   publishValveState(currentValveState);
 }
@@ -483,7 +517,7 @@ void handleModes() {
   // Betriebsmodi steuern
   if (mode == ON) {
       handleValveAndPumpControl("Pos2");
-  } else if (mode == OFF) {
+  } else if (mode == OFF || mode == CLEANING) {
       handleValveAndPumpControl("Pos4");
   } else if (mode == AUTO && validData) {
       if (averageTempAir-deltaTemp > averageTempWater && averageTempWater < targetTemp) {
@@ -505,6 +539,7 @@ void printStatusBar(){
   switch (mode) {
     case ON: lcd.print("Manuell - AN"); break;
     case OFF: lcd.print("Manuell - AUS"); break;
+    case CLEANING: lcd.print("Man. - REINIGUNG"); break;
     case AUTO: lcd.print("AUTO"); break;
   }
   // WiFi Status
