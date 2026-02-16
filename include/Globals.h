@@ -9,7 +9,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.8.0";
+const char* firmware = "0.9.0";
 
 // Pin-Definitionen
 #define BUTTON_PIN 16 // GPIO16 pin connected to button
@@ -58,6 +58,12 @@ float deltaTemp = 2.0f; // Temp delta to prevent many valve switching
 ValveState currentValveState = UNDEFINED;
 int currentPumpState = 1;
 Mode mode = AUTO; 
+
+// Define the time zone offset and daylight saving time offset
+const long gmtOffset_sec = 3600; // GMT+1
+const int daylightOffset_sec = 3600; // Daylight saving time offset (1 hour)
+// NTP server to get the time
+const char* ntpServer = "pool.ntp.org"; // NTP server address
 
 // LCD config
 LiquidCrystal_PCF8574 lcd(0x27);  // set the LCD address to 0x27 for a 16 chars and 2 line display

@@ -22,4 +22,5 @@ typedef struct struct_message_send {
     Mode mode;
     ValveState currentValveState;
     int currentPumpState;
+    tm lastUpdate; // Last update time
   } struct_message_send;

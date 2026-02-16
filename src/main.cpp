@@ -10,6 +10,8 @@
 #include <Credentials.h>
 #include <Globals.h>
 #include <MQTT_common.h>
+#include "time.h"
+
                 
 void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
@@ -37,6 +39,9 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println(WiFi.localIP());
   Serial.print("MAC-Address: ");
   Serial.println(WiFi.macAddress());
+
+  //init and get the time
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 }
 
 unsigned long lastWiFiCheck = 0;
@@ -68,6 +73,7 @@ void setup() {
   int error;
 
   Serial.begin(115200);
+  delay(1000);
   // turn on the external antenna
   pinMode(3, OUTPUT);
   digitalWrite(3, LOW); //turn on this function
@@ -251,6 +257,31 @@ void offsetAirChangedFunction(float incomingOffsetAir) {
   }
 }
 
+void sendValues(const u_int8_t *mac_addr) {
+  // Send data as requested
+  myDataSend.averageTempWater = averageTempWater;
+  myDataSend.averageTempAir = averageTempAir;
+  myDataSend.targetTemp = targetTemp;
+  myDataSend.mode = mode;
+  myDataSend.currentValveState = currentValveState;
+  myDataSend.currentPumpState = currentPumpState;
+  struct tm timeinfo;
+  if(getLocalTime(&timeinfo)){
+    myDataSend.lastUpdate = timeinfo;
+  } else {
+    Serial.println("Failed to obtain time");
+  }
+
+  // Send message via ESP-NOW
+  esp_err_t result = esp_now_send(mac_addr, (uint8_t *) &myDataSend, sizeof(myDataSend));
+  if (result == ESP_OK) {
+    Serial.println("Sent with success");
+  }
+  else {
+    Serial.println("Error sending the data");
+  }
+}
+
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
@@ -305,22 +336,7 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
 
     if (cmd == "get-values")
     {
-      // Send data as requested
-      myDataSend.averageTempWater = averageTempWater;
-      myDataSend.averageTempAir = averageTempAir;
-      myDataSend.targetTemp = targetTemp;
-      myDataSend.mode = mode;
-      myDataSend.currentValveState = currentValveState;
-      myDataSend.currentPumpState = currentPumpState;
-
-      // Send message via ESP-NOW
-      esp_err_t result = esp_now_send(esp_now_info->src_addr, (uint8_t *) &myDataSend, sizeof(myDataSend));
-      if (result == ESP_OK) {
-        Serial.println("Sent with success");
-      }
-      else {
-        Serial.println("Error sending the data");
-      }
+      sendValues(esp_now_info->src_addr);
     } else if (cmd == "set-mode")
     {
       String mode = doc["mode"];
@@ -371,6 +387,10 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
           const char* firmware = doc["firmware"];
           publishGreenhouseSensorData(value, battery, firmware);
         }
+      }
+      if (doc["return"] == "get-values")
+      {
+        sendValues(esp_now_info->src_addr);
       }
     }
   }
