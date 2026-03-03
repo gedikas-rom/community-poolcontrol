@@ -34,6 +34,7 @@ const char* mqtt_topic_PavilionFirmware = "poolcontrol/PavilionFirmware";  // Pa
 const char* mqtt_topic_GreenhouseTemp = "poolcontrol/GreenhouseTemp";  // GreenhouseTemp
 const char* mqtt_topic_GreenhouseBattery = "poolcontrol/GreenhouseBattery";  // GreenhouseBattery
 const char* mqtt_topic_GreenhouseFirmware = "poolcontrol/GreenhouseFirmware";  // GreenhouseFirmware
+const char* mqtt_topic_BridgeFirmware = "poolcontrol/BridgeFirmware";  // BridgeFirmware
 
 
 unsigned long lastMqttReconnectAttempt = 0;
@@ -51,14 +52,14 @@ void publishValveState(ValveState state);
 void publishPumpState(int state);
 void publishMode(Mode mode);
 
-// MQTT Callback für eingehende Nachrichten
+// MQTT callback for incoming messages
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   // Payload in String umwandeln
   char message[length + 1];
   memcpy(message, payload, length);
   message[length] = '\0';
   
-  Serial.printf("MQTT Message arrived [%s]: %s\n", topic, message);
+  Serial.printf("[MQTT] Message arrived [%s]: %s\n", topic, message);
   if (String(topic) == mqtt_topic_set_mode) {
     if (String(message) == "AUTO") {
       _modeChangedFunction(AUTO);
@@ -85,7 +86,7 @@ bool connectMQTT() {
     return true;
   }
 
-  Serial.print("Connect to MQTT Broker...");
+  Serial.print("[MQTT] Attempting to connect to broker...");
   
   // Client ID generieren
   String clientId = "Poolcontrol";
@@ -111,7 +112,7 @@ bool connectMQTT() {
     mqtt.subscribe(mqtt_topic_set_offsetAir);
     
     // Setting Homeassistant sensor config
-    Serial.println("--> HA Config");
+    Serial.println("[MQTT] --> HA Config");
     mqtt.setBufferSize(1000);
     mqtt.publish(mqtt_topic_ha_firmware.c_str(), mqtt_ha_config_firmware, true);
     mqtt.publish(mqtt_topic_ha_set_mode.c_str(), mqtt_ha_config_set_mode, true);
@@ -134,7 +135,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_GreenhouseTemp.c_str(), mqtt_ha_config_GreenhouseTemp, true);
     mqtt.publish(mqtt_topic_ha_GreenhouseBattery.c_str(), mqtt_ha_config_GreenhouseBattery, true);
     mqtt.publish(mqtt_topic_ha_GreenhouseFirmware.c_str(), mqtt_ha_config_GreenhouseFirmware, true);
-    Serial.println("<-- HA Config");
+    mqtt.publish(mqtt_topic_ha_BridgeFirmware.c_str(), mqtt_ha_config_BridgeFirmware, true);
+    Serial.println("[MQTT] <-- HA Config");
 
     return true;
   } else {
@@ -154,7 +156,7 @@ void publishPreferences(Mode mode, ValveState valvestate, int state, float targe
     return;
   }
 
-  Serial.printf("MQTT Update - publishPreferences: Mode: %d, TargetTemp: %.1f, DeltaTemp: %.1f, OffsetWater: %.1f, OffsetAir: %.1f\n", mode, targetTemp, deltaTemp, offsetWater, offsetAir);
+  Serial.printf("[MQTT] Update - publishPreferences: Mode: %d, TargetTemp: %.1f, DeltaTemp: %.1f, OffsetWater: %.1f, OffsetAir: %.1f\n", mode, targetTemp, deltaTemp, offsetWater, offsetAir);
   publishMode(mode);
   //mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : "OFF", true);
 
@@ -191,7 +193,7 @@ void publishTemperatures(float averageTempWater, float averageTempAir) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishTemperatures: TempWater: %.1f, TempAir: %.1f\n", averageTempWater, averageTempAir);
+  Serial.printf("[MQTT] Update - publishTemperatures: TempWater: %.1f, TempAir: %.1f\n", averageTempWater, averageTempAir);
   char tempWaterStr[10];
   dtostrf(averageTempWater, 1, 1, tempWaterStr);
   mqtt.publish(mqtt_topic_TempWater, tempWaterStr, true);
@@ -205,7 +207,7 @@ void publishValveState(ValveState state) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishValveState: %d", state);
+  Serial.printf("[MQTT] Update - publishValveState: %d", state);
   mqtt.publish(mqtt_topic_valvestate, state == OPEN ? "OPEN" : state == CLOSED ? "CLOSED" : state == CLOSING ? "CLOSING" : state == OPENING ? "OPENING" : "UNDEFINED", true);
 }
 
@@ -213,7 +215,7 @@ void publishPumpState(int state) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishPumpState: %d", state);
+  Serial.printf("[MQTT] Update - publishPumpState: %d", state);
   char pumpStateStr[10];
   dtostrf(state, 1, 1, pumpStateStr);
   mqtt.publish(mqtt_topic_pumpstate, pumpStateStr, true);
@@ -223,7 +225,7 @@ void publishMode(Mode mode) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishMode: %d\n", mode);
+  Serial.printf("[MQTT] Update - publishMode: %d\n", mode);
   mqtt.publish(mqtt_topic_mode, mode == AUTO ? "AUTO" : mode == ON ? "ON" : mode == OFF ? "OFF" : "CLEANING", true);
 }
 
@@ -231,7 +233,7 @@ void publishTargetTemp(float targetTemp) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishTargetTemp: %.1f\n", targetTemp);
+  Serial.printf("[MQTT] Update - publishTargetTemp: %.1f\n", targetTemp);
   char targetTempStr[10];
   dtostrf(targetTemp, 1, 1, targetTempStr);
   mqtt.publish(mqtt_topic_targetTemp, targetTempStr, true);
@@ -241,7 +243,7 @@ void publishDeltaTemp(float deltaTemp) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishDeltaTemp: %.1f\n", deltaTemp);
+  Serial.printf("[MQTT] Update - publishDeltaTemp: %.1f\n", deltaTemp);
   char deltaTempStr[10];
   dtostrf(deltaTemp, 1, 1, deltaTempStr);
   mqtt.publish(mqtt_topic_deltaTemp, deltaTempStr, true);
@@ -251,7 +253,7 @@ void publishOffsetWater(float offsetWater) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishOffsetWater: %.1f\n", offsetWater);
+  Serial.printf("[MQTT] Update - publishOffsetWater: %.1f\n", offsetWater);
   char offsetWaterStr[10];
   dtostrf(offsetWater, 1, 1, offsetWaterStr);
   mqtt.publish(mqtt_topic_offsetWater, offsetWaterStr, true);
@@ -261,7 +263,7 @@ void publishOffsetAir(float offsetAir) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishOffsetAir: %.1f\n", offsetAir);
+  Serial.printf("[MQTT] Update - publishOffsetAir: %.1f\n", offsetAir);
   char offsetAirStr[10];
   dtostrf(offsetAir, 1, 1, offsetAirStr);
   mqtt.publish(mqtt_topic_offsetAir, offsetAirStr, true);
@@ -271,7 +273,7 @@ void publishPavilionSensorData(float temp, int battery, const char* firmware) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishPavilionTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
+  Serial.printf("[MQTT] Update - publishPavilionTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
   char tempStr[10];
   dtostrf(temp, 1, 1, tempStr);
   mqtt.publish(mqtt_topic_PavilionTemp, tempStr, true);
@@ -287,7 +289,7 @@ void publishGreenhouseSensorData(float temp, int battery, const char* firmware) 
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("MQTT Update - publishGreenhouseTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
+  Serial.printf("[MQTT] Update - publishGreenhouseTemp: %.1f, battery: %d, firmware: %s\n", temp, battery, firmware);
   char tempStr[10];
   dtostrf(temp, 1, 1, tempStr);
   mqtt.publish(mqtt_topic_GreenhouseTemp, tempStr, true);
@@ -297,6 +299,14 @@ void publishGreenhouseSensorData(float temp, int battery, const char* firmware) 
   mqtt.publish(mqtt_topic_GreenhouseBattery, batteryStr, true);
 
   mqtt.publish(mqtt_topic_GreenhouseFirmware, firmware, true);
+}
+
+void publishBridgeFirmware(const char* firmware) {
+  if (!mqtt.connected() || firmware == nullptr || firmware[0] == '\0') {
+    return;
+  }
+  Serial.printf("[MQTT] Update - publishBridgeFirmware: %s\n", firmware);
+  mqtt.publish(mqtt_topic_BridgeFirmware, firmware, true);
 }
 
 void setupMQTT(WiFiClient& espClient, const char* firmware,     
@@ -314,10 +324,10 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
     _firmware = firmware;
     mqtt.setClient(espClient);
     mqtt.setServer(mqtt_server, mqtt_port);
-    Serial.println("MQTT Server: " + String(mqtt_server) + ":" + String(mqtt_port));
+    Serial.println("[MQTT] Server: " + String(mqtt_server) + ":" + String(mqtt_port));
     mqtt.setCallback(mqttCallback);
     connectMQTT();
-    Serial.println("MQTT setup done");
+    Serial.println("[MQTT] Setup done");
 }
 
 void loopMQTT() {

@@ -11,61 +11,67 @@
 #include <Globals.h>
 #include <MQTT_common.h>
 #include "time.h"
+#include "EspnowHandler.h"
 
-                
-void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void modeChangedFunction(Mode mode);
 void targetTempChangedFunction(float targetTemp);
 void deltaTempChangedFunction(float deltaTemp);
 void offsetWaterChangedFunction(float offsetWater);
 void offsetAirChangedFunction(float offsetAir);
+void setupWiFi();
+void initMqttAfterWifi();
+
+static bool mqttInitialized = false;
+static bool lcdInitialized = false;
 
 void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Disconnected from WiFi access point");
-  Serial.print("WiFi lost connection. Reason: ");
+  Serial.println("[WIFI] Disconnected from access point");
+  Serial.print("[WIFI] Lost connection. Reason: ");
   Serial.println(info.wifi_sta_disconnected.reason);
-  Serial.println("Trying to Reconnect");
-  WiFi.begin(WIFI_ssid, WIFI_password);
+  Serial.println("[WIFI] Trying to reconnect...");
+  WiFi.reconnect();
 }
 
 void WiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Connected to AP successfully!");
+  Serial.println("[WIFI] Connected to AP successfully");
 }
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
+  Serial.println("[WIFI] Connected");
+  Serial.print("[WIFI] IP address: ");
   Serial.println(WiFi.localIP());
-  Serial.print("MAC-Address: ");
+  Serial.print("[WIFI] MAC address: ");
   Serial.println(WiFi.macAddress());
 
-  //init and get the time
+  // init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  initMqttAfterWifi();
 }
 
-unsigned long lastWiFiCheck = 0;
-void checkWiFi()
-{
-  unsigned long now = millis();
-  if ((WiFi.status() != WL_CONNECTED) && (now - lastWiFiCheck >= WIFI_RECONNECT_INTERVAL)) {
-    Serial.println("Reconnecting to WiFi...");
-    WiFi.disconnect();
-    WiFi.reconnect();
-    lastWiFiCheck = now;
-  }
+void initMqttAfterWifi() {
+  if (mqttInitialized) return;
+
+  Serial.println("[MQTT] Initializing after WiFi got IP");
+  setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction,
+    offsetWaterChangedFunction, offsetAirChangedFunction);
+  Serial.println("[MQTT] Publishing initial preferences");
+  publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp, offsetWater, offsetAir);
+  Serial.println("[MQTT] Initialization complete");
+  mqttInitialized = true;
 }
 
 void setupWiFi() {
+  Serial.println("[WIFI] Configuring STA mode");
   WiFi.mode(WIFI_STA);
   WiFi.hostname(hostname);
-  WiFi.disconnect(true);
-  delay(1000);
+  WiFi.setAutoReconnect(true);
   
   WiFi.onEvent(WiFiConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
   WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(WiFiDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
+  Serial.println("[WIFI] Starting connection");
   WiFi.begin(WIFI_ssid, WIFI_password);
 }
 
@@ -80,14 +86,14 @@ void setup() {
   delay(100);
   pinMode(14, OUTPUT); 
   digitalWrite(14, HIGH);//use external antenna  
-  Serial.println("External antenna enabled");
-  Serial.println("LCD...Probing for PCF8574 on address 0x27...");
+  Serial.println("[PC] External antenna enabled");
+  Serial.println("[PC] LCD...Probing for PCF8574 on address 0x27...");
 
   // See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device.
   Wire.begin();
   Wire.beginTransmission(0x27);
   error = Wire.endTransmission();
-  Serial.print("Error: ");
+  Serial.print("[PC] LCD Probe: ");
   Serial.print(error);
 
   if (error == 0) {
@@ -102,6 +108,7 @@ void setup() {
     lcd.createChar(6, target);
     
     lcd.setBacklight(255);
+    lcdInitialized = true;
   } else {
     Serial.println(": LCD not found.");
   }  // if
@@ -117,7 +124,7 @@ void setup() {
 		Serial.printf("Air %d: 0x%llx,\n", j, addrAir[j]);
 	}
 
-  // Pin-Modi konfigurieren
+  // Configure pin modes
   pinMode(RELAY_POS2, OUTPUT);
   pinMode(RELAY_POS4, OUTPUT);
   pinMode(PUMP_OFF, OUTPUT);
@@ -125,7 +132,7 @@ void setup() {
   pinMode(PUMP_2, OUTPUT);
   pinMode(PUMP_3, OUTPUT);
 
-  // Relais und Pumpe initial ausschalten
+  // Switch off relays and pump initially
   digitalWrite(RELAY_POS2, HIGH);
   digitalWrite(RELAY_POS4, HIGH);
   digitalWrite(PUMP_OFF, HIGH);
@@ -139,34 +146,24 @@ void setup() {
   // Wifi config
   setupWiFi();
 
-  // MQTT config
-  setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction, 
-    offsetWaterChangedFunction, offsetAirChangedFunction);
-  publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp, offsetWater, offsetAir);
-
   // OTA config
   setupOTA(hostname, []() {
-        Serial.println("OTA Start");
+        Serial.println("[OTA] Start");
       }, [](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+        Serial.printf("[OTA] Progress: %u%%\r", (progress / (total / 100)));
       }, []() {
-        Serial.println("\nEnd");
+        Serial.println("[OTA] End");
       }, [](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        Serial.printf("[OTA] Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR) Serial.println("[OTA] Auth Failed");
+        else if (error == OTA_BEGIN_ERROR) Serial.println("[OTA] Begin Failed");
+        else if (error == OTA_CONNECT_ERROR) Serial.println("[OTA] Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR) Serial.println("[OTA] Receive Failed");
+        else if (error == OTA_END_ERROR) Serial.println("[OTA] End Failed");
       });
   
   // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-  esp_now_register_recv_cb(OnDataRecv);
-  esp_now_register_send_cb(OnDataSent);
+  setupEspnowHandler();
 }  // setup()
 
 unsigned long now;
@@ -182,8 +179,8 @@ void loop() {
   loopOTA();
   // MQTT service loop
   loopMQTT();
-  // check WiFi status
-  checkWiFi();
+  // Espnow service loop
+  loopEspnowHandler();
 
   now = millis();
   if (now - lastDisplayOff > DISPLAY_OFF_INTERVAL) {
@@ -196,7 +193,7 @@ void loop() {
     refreshDisplay();
     lastPrintDisplay = now;
   }
-
+/*
   // read the state of the switch/button:
   currentState = digitalRead(BUTTON_PIN);
 
@@ -207,19 +204,18 @@ void loop() {
   }
   // save the last state
   lastState = currentState;
-  
+  */
 }  // loop()
 
 // callback when data comes in from mqtt
 void modeChangedFunction(Mode incomingmode) {
-  Serial.printf("Mode changed from %d to %d\n", mode, incomingmode);
+  Serial.printf("[PC] Mode changed from %d to %d\n", mode, incomingmode);
   mode = incomingmode;
   publishMode(mode);
 }
 
 void targetTempChangedFunction(float incomingTargetTemp) {
-  Serial.print("Target temperature changed to: ");
-  Serial.println(incomingTargetTemp);
+  Serial.printf("[PC] Target temperature changed to: %.1f\n", incomingTargetTemp);
   if (incomingTargetTemp >= 10 && incomingTargetTemp <= 35)
   {
     targetTemp = incomingTargetTemp;
@@ -228,8 +224,7 @@ void targetTempChangedFunction(float incomingTargetTemp) {
 }
 
 void deltaTempChangedFunction(float incomingDeltaTemp) {
-  Serial.print("Delta temperature changed to: ");
-  Serial.println(incomingDeltaTemp);
+  Serial.printf("[PC] Delta temperature changed to: %.1f\n", incomingDeltaTemp);
   if (incomingDeltaTemp > 0 && incomingDeltaTemp <= 10)
   {
     deltaTemp = incomingDeltaTemp;
@@ -238,8 +233,7 @@ void deltaTempChangedFunction(float incomingDeltaTemp) {
 }
 
 void offsetWaterChangedFunction(float incomingOffsetWater) {
-  Serial.print("Offset water temperature changed to: ");
-  Serial.println(incomingOffsetWater);
+  Serial.printf("[PC] Offset water temperature changed to: %.1f\n", incomingOffsetWater);
   if (incomingOffsetWater >= -5 && incomingOffsetWater <= 5)
   {
     offsetWater = incomingOffsetWater;
@@ -248,8 +242,7 @@ void offsetWaterChangedFunction(float incomingOffsetWater) {
 }
 
 void offsetAirChangedFunction(float incomingOffsetAir) {
-  Serial.print("Offset air temperature changed to: ");
-  Serial.println(incomingOffsetAir);
+  Serial.printf("[PC] Offset air temperature changed to: %.1f\n", incomingOffsetAir);
   if (incomingOffsetAir >= -5 && incomingOffsetAir <= 5)
   {
     offsetAir = incomingOffsetAir;
@@ -257,148 +250,29 @@ void offsetAirChangedFunction(float incomingOffsetAir) {
   }
 }
 
-void sendValues(const u_int8_t *mac_addr) {
-  // Send data as requested
-  myDataSend.averageTempWater = averageTempWater;
-  myDataSend.averageTempAir = averageTempAir;
-  myDataSend.targetTemp = targetTemp;
-  myDataSend.mode = mode;
-  myDataSend.currentValveState = currentValveState;
-  myDataSend.currentPumpState = currentPumpState;
-  struct tm timeinfo;
-  if(getLocalTime(&timeinfo)){
-    myDataSend.lastUpdate = timeinfo;
-  } else {
-    Serial.println("Failed to obtain time");
-  }
+float getAverageTempWater() {
+  return averageTempWater;
+} 
 
-  // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(mac_addr, (uint8_t *) &myDataSend, sizeof(myDataSend));
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
-  }
-  else {
-    Serial.println("Error sending the data");
-  }
+float getAverageTempAir() {
+  return averageTempAir;
+} 
+
+float getTargetTemp() {
+  return targetTemp;
 }
 
-// callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-  lastESPNOWRequest = millis();
+Mode getMode() {
+  return mode;
 }
 
-// callback function that will be executed when data is received
-void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len) {
-	String payload;
-	payload.reserve(len);
-	for(auto i = 0; i < len; i++)
-	{
-		payload += (char)incomingData[i];
-	}
-
-	JsonDocument doc;
-	DeserializationError error = deserializeJson(doc, payload);
-	if(error) { Serial.print("Error receiving data. Bad response"); return; }
-
-  esp_now_peer_info_t peerInfo;
-  memset(&peerInfo, 0, sizeof(peerInfo));
-  memcpy(peerInfo.peer_addr, esp_now_info->src_addr, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false; 
-  Serial.printf("src_addr: %02x:%02x:%02x:%02x:%02x:%02x\n",
-                  peerInfo.peer_addr[0],peerInfo.peer_addr[1], peerInfo.peer_addr[2],
-                  peerInfo.peer_addr[3], peerInfo.peer_addr[4],peerInfo.peer_addr[5]);
- 
-  // delete before pair
-  const uint8_t *peer_addr = peerInfo.peer_addr;
-  esp_err_t delStatus = esp_now_del_peer(peer_addr);
-  Serial.print("Slave Delete Status: ");
-  if (delStatus == ESP_OK) {
-    // Delete success
-    Serial.println("Success");
-  } else if (delStatus == ESP_ERR_ESPNOW_NOT_INIT) {
-    // How did we get so far!!
-    Serial.println("ESPNOW Not Init");
-  } else if (delStatus == ESP_ERR_ESPNOW_ARG) {
-    Serial.println("Invalid Argument");
-  } else if (delStatus == ESP_ERR_ESPNOW_NOT_FOUND) {
-    Serial.println("Peer not found.");
-  } else {
-    Serial.println("Not sure what happened");
-  }
-
-  esp_err_t err = esp_now_add_peer(&peerInfo);
-  if (err == ESP_OK || err == ESP_ERR_ESPNOW_EXIST){
-    String cmd = doc["cmd"];
-    Serial.printf("Received data OK: cmd: %s\n", cmd);
-
-    if (cmd == "get-values")
-    {
-      sendValues(esp_now_info->src_addr);
-    } else if (cmd == "set-mode")
-    {
-      String mode = doc["mode"];
-      if (mode == "ON")
-      {
-        modeChangedFunction(ON);
-      } else if (mode == "OFF")
-      {
-        modeChangedFunction(OFF);
-      } else if (mode == "CLEANING")
-      {
-        modeChangedFunction(CLEANING);
-      } else if (mode == "AUTO")
-      {
-        modeChangedFunction(AUTO);
-      }
-    } else if (cmd == "set-targettemp")
-    {
-      float targetTemp = doc["targetTemp"];
-      targetTempChangedFunction(targetTemp);
-    } else if (cmd == "set-deltatemp")
-    {
-      float deltaTemp = doc["deltaTemp"];
-      deltaTempChangedFunction(deltaTemp);
-    } else if (cmd == "set-offsetwater")
-    {
-      float offsetWater = doc["offsetWater"];
-      offsetWaterChangedFunction(offsetWater);
-    } else if (cmd == "set-offsetair")
-    {
-      float offsetAir = doc["offsetAir"];
-      offsetAirChangedFunction(offsetAir);
-    } else if (cmd == "set-sensordata")
-    {
-      if (doc["sensor"] == "temperature")
-      {
-        if (doc["location"] == "pavilion")
-        {
-          float value = doc["value"];
-          int battery = doc["battery"];
-          const char* firmware = doc["firmware"];
-          publishPavilionSensorData(value, battery, firmware);
-        }
-        else if (doc["location"] == "greenhouse")
-        {
-          float value = doc["value"];
-          int battery = doc["battery"];
-          const char* firmware = doc["firmware"];
-          publishGreenhouseSensorData(value, battery, firmware);
-        }
-      }
-      if (doc["return"] == "get-values")
-      {
-        sendValues(esp_now_info->src_addr);
-      }
-    }
-  }
-  else
-  {
-    Serial.println("Failed to add peer");
-  } 
+ValveState getCurrentValveState() {
+  return currentValveState;
 }
+
+int getCurrentPumpState() {
+  return currentPumpState;
+} 
 
 bool isValidTemperatureWater(float temp){
   return temp >= 0 && temp <= 35;
@@ -461,12 +335,12 @@ void handlePumpControl(uint8_t velocity){
   if (now - lastPumpVelocityChange > PUMP_INTERVAL && currentPumpState != velocity)
   {
     switch(velocity) {
-      case 0: digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Pumpe stoppen
-      case 1: digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Stufe 1 = eco
-      case 2: digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Stufe 2
-      case 3: digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Stufe 3
+      case 0: digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Stop pump
+      case 1: digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Level 1 = eco
+      case 2: digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Level 2
+      case 3: digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Level 3
     }
-    Serial.print("Pumpe schaltet auf...");
+    Serial.print("Pump switching to level...");
     Serial.println(currentPumpState);
     publishPumpState(currentPumpState);
 
@@ -484,7 +358,7 @@ void handleValveAndPumpControl(String position) {
   Serial.printf("position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
   if (now - lastValveMovement <= VALVE_INTERVAL)
   {
-    // Ventilbewegung läuft noch 
+    // Valve is still moving
     return;
   }
 
@@ -498,27 +372,27 @@ void handleValveAndPumpControl(String position) {
       currentValveState = CLOSED;
     lastValveMovement = 0;
     Serial.printf("position: %s, now: %lu, lastValveMovement: %lu, VALVE_INTERVAL: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL);
-    Serial.println("Ventilbewegung endet");
+    Serial.println("Valve movement finished");
   } 
 
   if (position == "Pos2") {
-      // Großer Kreislauf (Solar) aktivieren
+      // Activate large loop (solar)
       if (currentValveState != OPEN)
       {
-        Serial.println("Ventil öffnet...");
+        Serial.println("Valve opening...");
         digitalWrite(RELAY_POS2, LOW);
-        digitalWrite(RELAY_POS4, HIGH); // Kleiner Kreislauf deaktivieren
+        digitalWrite(RELAY_POS4, HIGH); // Disable small loop
         lastValveMovement = now;
         currentValveState = OPENING;
       }
       handlePumpControl(PUMPLEVEL_FULL); // Oder Stufe2 basierend auf Bedingungen
   } else if (position == "Pos4") {
-      // Kleiner Kreislauf aktivieren
+      // Activate small loop
       if (currentValveState != CLOSED)
       {
-        Serial.println("Ventil schließt...");
+        Serial.println("Valve closing...");
         digitalWrite(RELAY_POS4, LOW);
-        digitalWrite(RELAY_POS2, HIGH); // Großer Kreislauf deaktivieren
+        digitalWrite(RELAY_POS2, HIGH); // Disable large loop
         lastValveMovement = now;
         currentValveState = CLOSING;
       }
@@ -534,7 +408,7 @@ void handleModes() {
   // Check valid sensor data
   bool validData =!(averageTempAir < 0 || averageTempWater < 0); 
 
-  // Betriebsmodi steuern
+  // Control operating modes
   if (mode == ON) {
       handleValveAndPumpControl("Pos2");
   } else if (mode == OFF || mode == CLEANING) {
@@ -542,13 +416,13 @@ void handleModes() {
   } else if (mode == AUTO && validData) {
       if (averageTempAir-deltaTemp > averageTempWater && averageTempWater < targetTemp) {
           Serial.println("handleModes: AUTO - Pos2");
-          handleValveAndPumpControl("Pos2"); // Großer Kreislauf aktivieren
+          handleValveAndPumpControl("Pos2"); // Activate large loop
       } else if (averageTempAir <= averageTempWater || currentValveState == UNDEFINED) {
-          handleValveAndPumpControl("Pos4"); // Kleiner Kreislauf aktivieren
+          handleValveAndPumpControl("Pos4"); // Activate small loop
           Serial.println("handleModes: AUTO - Pos4");
       } else
       {
-          handleValveAndPumpControl("----"); // Keine neue Ventilstellung, Ventilbewegung stoppen wenn nötig
+          handleValveAndPumpControl("----"); // No new valve position, stop valve movement if needed
           Serial.println("handleModes: AUTO - Pos2 in Delta-Temp");
       }
   }
@@ -599,6 +473,8 @@ void printTempOnDisplay(){
 
 int currentPage = 0;
 void refreshDisplay(){
+  if (!lcdInitialized) return;
+
   if (currentPage == 0)
   {
     printTempOnDisplay();

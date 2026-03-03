@@ -18,3 +18,4 @@ void publishOffsetWater(float offsetWater);
 void publishOffsetAir(float offsetAir);
 void publishPavilionSensorData(float temp, int battery, const char* firmware);
 void publishGreenhouseSensorData(float temp, int battery, const char* firmware);
+void publishBridgeFirmware(const char* firmware);

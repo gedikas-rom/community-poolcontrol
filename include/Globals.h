@@ -11,16 +11,16 @@
 const char* hostname = "poolcontrol";
 const char* firmware = "0.9.0";
 
-// Pin-Definitionen
-#define BUTTON_PIN 16 // GPIO16 pin connected to button
-#define RELAY_POS2 2    // 3-Wege-Ventil (Position offen = Pos2)
-#define RELAY_POS4 21    // 3-Wege-Ventil (Position zu = Pos4)
-#define PUMP_OFF 18     // Pumpe red
-#define PUMP_1 20     // Pumpenstufe 1 brown
-#define PUMP_2 19     // Pumpenstufe 2 green
-#define PUMP_3 17     // Pumpenstufe 3 white   
-#define TEMP_WATER_PIN 1    // DS18B20 Datenleitung Wassertemperatur
-#define TEMP_AIR_PIN 0    // DS18B20 Datenleitung Lufttemperatur
+// Pin definitions
+#define BUTTON_PIN 18 // GPIO16 pin connected to button
+#define RELAY_POS2 2    // 3-way valve (open position = Pos2)
+#define RELAY_POS4 21    // 3-way valve (closed position = Pos4)
+#define PUMP_OFF 18     // Pump off relay (red)
+#define PUMP_1 20     // Pump level 1 relay (brown)
+#define PUMP_2 19     // Pump level 2 relay (green)
+#define PUMP_3 19     // P17 pump level 3 relay (white)
+#define TEMP_WATER_PIN 1    // DS18B20 water temperature data line
+#define TEMP_AIR_PIN 0    // DS18B20 air temperature data line
 #define PUMPLEVEL_ECO 1  // Pump level 1 = eco
 #define PUMPLEVEL_FULL 2    // Pump level 2 = full power
 #define PUMPLEVEL_CLEANING 2 // Pump level 2 = cleaning mode

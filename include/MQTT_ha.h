@@ -28,6 +28,7 @@ std::string mqtt_topic_ha_PavilionFirmware = std::string(mqtt_topic_ha_base) + "
 std::string mqtt_topic_ha_GreenhouseTemp = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseTemp/config";
 std::string mqtt_topic_ha_GreenhouseBattery = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseBattery/config";
 std::string mqtt_topic_ha_GreenhouseFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseFirmware/config";
+std::string mqtt_topic_ha_BridgeFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/BridgeFirmware/config";
 
 
 const char* mqtt_ha_config_firmware = R"rawliteral({
@@ -692,5 +693,34 @@ const char* mqtt_ha_config_GreenhouseFirmware = R"rawliteral({
   },
   "state_topic": "poolcontrol/GreenhouseFirmware",
   "unique_id": "poolcontrol_GreenhouseFirmware",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_BridgeFirmware = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "entity_category": "diagnostic",
+  "name": "Bridge Firmware",
+  "object_id": "poolcontrol_BridgeFirmware",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/BridgeFirmware",
+  "unique_id": "poolcontrol_BridgeFirmware",
   "value_template": "{{ value }}"
 })rawliteral";
