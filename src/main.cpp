@@ -183,7 +183,7 @@ void loop() {
   loopEspnowHandler();
 
   now = millis();
-  if (now - lastDisplayOff > DISPLAY_OFF_INTERVAL) {
+  if (lcdInitialized && (now - lastDisplayOff > DISPLAY_OFF_INTERVAL)) {
     lcd.setBacklight(0);
     lastDisplayOff = now;
   }
