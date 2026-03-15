@@ -9,6 +9,7 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
 void loopMQTT();
 void publishPreferences(Mode mode, ValveState valvestate, int state, float targetTemp, float deltaTemp, float offsetWater, float offsetAir);
 void publishTemperatures(float averageTempWater, float averageTempAir);
+void publishFilterPressure(float pressureMpa);
 void publishValveState(ValveState state);
 void publishPumpState(int state);
 void publishMode(Mode mode);

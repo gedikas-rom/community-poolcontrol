@@ -21,6 +21,7 @@ const char* mqtt_topic_targetTemp = "poolcontrol/TargetTemp";  // targetTemp
 const char* mqtt_topic_deltaTemp = "poolcontrol/DeltaTemp";  // deltaTemp
 const char* mqtt_topic_offsetWater = "poolcontrol/offsetWater";  // offsetWater
 const char* mqtt_topic_offsetAir = "poolcontrol/offsetAir";  // offsetAir
+const char* mqtt_topic_FilterPressure = "poolcontrol/FilterPressure";  // filter pressure in MPa
 
 const char* mqtt_topic_set_mode = "poolcontrol/set/mode";  // topic for setting mode
 const char* mqtt_topic_set_targetTemp = "poolcontrol/set/targettemp";  // topic for setting targetTemp
@@ -122,6 +123,7 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_set_offsetAir.c_str(), mqtt_ha_config_set_offsetAir, true);
     mqtt.publish(mqtt_topic_ha_TempWater.c_str(), mqtt_ha_config_TempWater, true);
     mqtt.publish(mqtt_topic_ha_TempAir.c_str(), mqtt_ha_config_TempAir, true);
+    mqtt.publish(mqtt_topic_ha_FilterPressure.c_str(), mqtt_ha_config_FilterPressure, true);
     mqtt.publish(mqtt_topic_ha_ValveState.c_str(), mqtt_ha_config_ValveState, true);
     mqtt.publish(mqtt_topic_ha_PumpState.c_str(), mqtt_ha_config_PumpState, true);
     mqtt.publish(mqtt_topic_ha_mode.c_str(), mqtt_ha_config_mode, true);
@@ -209,6 +211,16 @@ void publishValveState(ValveState state) {
   }
   Serial.printf("[MQTT] Update - publishValveState: %d", state);
   mqtt.publish(mqtt_topic_valvestate, state == OPEN ? "OPEN" : state == CLOSED ? "CLOSED" : state == CLOSING ? "CLOSING" : state == OPENING ? "OPENING" : "UNDEFINED", true);
+}
+
+void publishFilterPressure(float pressureMpa) {
+  if (!mqtt.connected()) {
+    return;
+  }
+  Serial.printf("[MQTT] Update - publishFilterPressure: %.3f MPa\n", pressureMpa);
+  char pressureStr[12];
+  snprintf(pressureStr, sizeof(pressureStr), "%.3f", pressureMpa);
+  mqtt.publish(mqtt_topic_FilterPressure, pressureStr, true);
 }
 
 void publishPumpState(int state) {

@@ -4,32 +4,47 @@
 #include <OneWireESP32.h>
 #include <LiquidCrystal_PCF8574.h>
 #include <GlobalDefs.h>
+#include <PCF8575.h>
 
 #ifndef GLOBALS_
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "0.9.0";
+const char* firmware = "1.0.2";
 
 // Pin definitions
-#define BUTTON_PIN 18 // GPIO16 pin connected to button
-#define RELAY_POS2 2    // 3-way valve (open position = Pos2)
-#define RELAY_POS4 21    // 3-way valve (closed position = Pos4)
-#define PUMP_OFF 18     // Pump off relay (red)
-#define PUMP_1 20     // Pump level 1 relay (brown)
-#define PUMP_2 19     // Pump level 2 relay (green)
-#define PUMP_3 19     // P17 pump level 3 relay (white)
-#define TEMP_WATER_PIN 1    // DS18B20 water temperature data line
-#define TEMP_AIR_PIN 0    // DS18B20 air temperature data line
-#define PUMPLEVEL_ECO 1  // Pump level 1 = eco
-#define PUMPLEVEL_FULL 2    // Pump level 2 = full power
-#define PUMPLEVEL_CLEANING 2 // Pump level 2 = cleaning mode
+#define FILTER_PRESSURE_PIN 2   // Pin for filter pressure sensor (analog input)
+#define BUTTON_PIN P10          // pin P10 on PCF8575 connected to button
+#define RELAY_POS2 P1           // 3-way valve (open position = Pos2)
+#define RELAY_POS4 P2           // 3-way valve (closed position = Pos4)
+#define PUMP_OFF P4             // Pump off relay (red) pin P4 on PCF8575
+#define PUMP_1 P5               // Pump level 1 relay (brown) pin P5 on PCF8575
+#define PUMP_2 P6               // Pump level 2 relay (green) pin P6 on PCF8575
+#define PUMP_3 P7               // Pump level 3 relay (white) pin P7 on PCF8575
+#define TEMP_WATER_PIN 1        // DS18B20 water temperature data line
+#define TEMP_AIR_PIN 0          // DS18B20 air temperature data line
+#define PUMPLEVEL_ECO 1         // Pump level 1 = eco
+#define PUMPLEVEL_FULL 2        // Pump level 2 = full power
+#define PUMPLEVEL_CLEANING 2    // Pump level 2 = cleaning mode
 
 #define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
 #define WIFI_RECONNECT_INTERVAL 5000
 #define VALVE_INTERVAL 70000 // Valve movement time
 #define PUMP_INTERVAL 5000 // Pump movement time
+
+// Pressure sensor calibration (sensor: 0.5V..4.5V => 0..4 MPa at sensor output)
+// Voltage divider correction: Vadc = Vsensor * (R2 / (R1 + R2))
+// Example values: R1=10k (sensor->ADC), R2=27k (ADC->GND)
+#define FILTER_PRESSURE_R1_OHM 10000.0f
+#define FILTER_PRESSURE_R2_OHM 27000.0f
+#define FILTER_PRESSURE_SENSOR_MIN_V 0.5f
+#define FILTER_PRESSURE_SENSOR_MAX_V 4.5f
+#define FILTER_PRESSURE_MIN_MPA 0.0f
+#define FILTER_PRESSURE_MAX_MPA 4.0f
+
+#define PCF8575_ADDRESS 0x20 // PCF8575 I2C address (default: 0x20, can be 0x21-0x27 depending on A0-A2 pin configuration)
+#define LCD_ADDRESS 0x27 // LCD I2C address (default: 0x27, can be 0x3F depending on the module)
 
 // Variables will change:
 int lastState = HIGH; // the previous state from the input pin
@@ -51,6 +66,7 @@ float currTempWater[maxDevices];
 float currTempAir[maxDevices];
 float averageTempWater = -1;
 float averageTempAir = -1;
+float filterPressureMpa = -1;
 float offsetWater = 1.5f; // Offset for water temperature
 float offsetAir = 0.0f; // Offset for air temperature
 float targetTemp = 25.0f; // Target water temperature
@@ -65,8 +81,11 @@ const int daylightOffset_sec = 3600; // Daylight saving time offset (1 hour)
 // NTP server to get the time
 const char* ntpServer = "pool.ntp.org"; // NTP server address
 
+// create PCF8575 object
+PCF8575 pcf8575(PCF8575_ADDRESS);
+
 // LCD config
-LiquidCrystal_PCF8574 lcd(0x27);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_PCF8574 lcd(LCD_ADDRESS);  // set the LCD address to 0x27 for a 16 chars and 4 line display
 
 // custom characters
 byte dotOff[] = { 0b00000, 0b01110, 0b10001, 0b10001,

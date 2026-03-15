@@ -58,6 +58,7 @@ extern void modeChangedFunction(Mode mode);
 extern float getAverageTempWater();
 extern float getAverageTempAir();
 extern float getTargetTemp();
+extern float getFilterPressureMpa();
 extern Mode getMode();
 extern ValveState getCurrentValveState();
 extern int getCurrentPumpState();
@@ -124,6 +125,7 @@ static void handleGetValues(const uint8_t *mac, const sensor_message &msg) {
     if (isRequested("averageTempWater"))    resp["averageTempWater"]  = serialized(String(getAverageTempWater(), 1));
     if (isRequested("averageTempAir"))      resp["averageTempAir"]  = serialized(String(getAverageTempAir(), 1));
     if (isRequested("targetTemp"))          resp["targetTemp"]      = serialized(String(getTargetTemp(), 1));
+    if (isRequested("filterPressureMpa"))   resp["filterPressureMpa"] = serialized(String(getFilterPressureMpa(), 3));
     if (isRequested("mode"))                resp["mode"]            = getMode();
     if (isRequested("valveState"))          resp["valveState"]      = getCurrentValveState();
     if (isRequested("pumpState"))           resp["pumpState"]       = getCurrentPumpState();

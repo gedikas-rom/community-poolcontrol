@@ -12,6 +12,7 @@
 #include <MQTT_common.h>
 #include "time.h"
 #include "EspnowHandler.h"
+#include "PCF8575.h"
 
 void modeChangedFunction(Mode mode);
 void targetTempChangedFunction(float targetTemp);
@@ -87,11 +88,11 @@ void setup() {
   pinMode(14, OUTPUT); 
   digitalWrite(14, HIGH);//use external antenna  
   Serial.println("[PC] External antenna enabled");
-  Serial.println("[PC] LCD...Probing for PCF8574 on address 0x27...");
+  Serial.printf("[PC] LCD...Probing for PCF8574 on address 0x%02X...\n", LCD_ADDRESS);
 
   // See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device.
   Wire.begin();
-  Wire.beginTransmission(0x27);
+  Wire.beginTransmission(LCD_ADDRESS);
   error = Wire.endTransmission();
   Serial.print("[PC] LCD Probe: ");
   Serial.print(error);
@@ -116,33 +117,32 @@ void setup() {
   //to find addresses for water temp bus
 	maxDevicesWater = dsWater.search(addrWater, maxDevicesWater);
 	for (uint8_t i = 0; i < maxDevicesWater; i += 1) {
-		Serial.printf("Water %d: 0x%llx,\n", i, addrWater[i]);
+		Serial.printf("[PC] Water %d: 0x%llx,\n", i, addrWater[i]);
 	}
   //to find addresses for air temp bus
 	maxDevicesAir = dsAir.search(addrAir, maxDevicesAir);
 	for (uint8_t j = 0; j < maxDevicesAir; j += 1) {
-		Serial.printf("Air %d: 0x%llx,\n", j, addrAir[j]);
+		Serial.printf("[PC] Air %d: 0x%llx,\n", j, addrAir[j]);
 	}
 
+  // PCF8575 init
+  pcf8575.begin();
+  Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X\n", PCF8575_ADDRESS);
+
   // Configure pin modes
-  pinMode(RELAY_POS2, OUTPUT);
-  pinMode(RELAY_POS4, OUTPUT);
-  pinMode(PUMP_OFF, OUTPUT);
-  pinMode(PUMP_1, OUTPUT);
-  pinMode(PUMP_2, OUTPUT);
-  pinMode(PUMP_3, OUTPUT);
-
-  // Switch off relays and pump initially
-  digitalWrite(RELAY_POS2, HIGH);
-  digitalWrite(RELAY_POS4, HIGH);
-  digitalWrite(PUMP_OFF, HIGH);
-  digitalWrite(PUMP_1, HIGH);
-  digitalWrite(PUMP_2, HIGH);
-  digitalWrite(PUMP_3, HIGH);
-
+  pcf8575.pinMode(RELAY_POS2, OUTPUT, HIGH); // Set relay pin as output and initialize to HIGH (off)
+  pcf8575.pinMode(RELAY_POS4, OUTPUT, HIGH); // Set relay pin as output and initialize to HIGH (off)
+  pcf8575.pinMode(PUMP_OFF, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
+  pcf8575.pinMode(PUMP_1, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
+  pcf8575.pinMode(PUMP_2, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
+  pcf8575.pinMode(PUMP_3, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
   // Button init
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pcf8575.pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with pull-up resistor
+  // Pressure sensor ADC input
+  pinMode(FILTER_PRESSURE_PIN, INPUT);
 
+  Serial.println("[PC] IO Expander pin modes configured");
+  
   // Wifi config
   setupWiFi();
 
@@ -155,11 +155,11 @@ void setup() {
         Serial.println("[OTA] End");
       }, [](ota_error_t error) {
         Serial.printf("[OTA] Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("[OTA] Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("[OTA] Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("[OTA] Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("[OTA] Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("[OTA] End Failed");
+        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+        else if (error == OTA_END_ERROR) Serial.println("End Failed");
       });
   
   // Init ESP-NOW
@@ -171,6 +171,7 @@ unsigned long lastPrintDisplay = 0;
 unsigned long lastDisplayOff = 0;
 
 void readTemperatures();
+void readFilterPressure();
 void handleModes();
 void refreshDisplay();
 
@@ -188,23 +189,25 @@ void loop() {
     lastDisplayOff = now;
   }
   if (now - lastPrintDisplay > MEASUREMENT_INTERVAL) {
+    Serial.printf("[WIFI] Wifi signal: %d\n", WiFi.RSSI());
     readTemperatures();
+    //readFilterPressure();
     handleModes();
     refreshDisplay();
     lastPrintDisplay = now;
   }
-/*
-  // read the state of the switch/button:
-  currentState = digitalRead(BUTTON_PIN);
 
-  if(lastState == HIGH && currentState == LOW)
+  // read the state of the switch/button:
+  currentState = pcf8575.digitalRead(BUTTON_PIN);
+
+  if(lcdInitialized && lastState == HIGH && currentState == LOW)
   {
     lcd.setBacklight(255);
     lastDisplayOff = now;
   }
   // save the last state
   lastState = currentState;
-  */
+  
 }  // loop()
 
 // callback when data comes in from mqtt
@@ -260,6 +263,10 @@ float getAverageTempAir() {
 
 float getTargetTemp() {
   return targetTemp;
+}
+
+float getFilterPressureMpa() {
+  return filterPressureMpa;
 }
 
 Mode getMode() {
@@ -330,32 +337,53 @@ void readTemperatures(){
   publishTemperatures(averageTempWater, averageTempAir);
 }
 
+void readFilterPressure() {
+  const uint16_t adcMax = 4095;
+  const float adcRefVoltage = 3.3f;
+  const float dividerFactor = (FILTER_PRESSURE_R1_OHM + FILTER_PRESSURE_R2_OHM) / FILTER_PRESSURE_R2_OHM;
+  const float slopeMpaPerVolt = (FILTER_PRESSURE_MAX_MPA - FILTER_PRESSURE_MIN_MPA) /
+                                (FILTER_PRESSURE_SENSOR_MAX_V - FILTER_PRESSURE_SENSOR_MIN_V);
+
+  const uint16_t adcRaw = analogRead(FILTER_PRESSURE_PIN);
+  const float adcVoltage = (static_cast<float>(adcRaw) / adcMax) * adcRefVoltage;
+  const float sensorVoltage = adcVoltage * dividerFactor;
+
+  float pressureMpa = (sensorVoltage - FILTER_PRESSURE_SENSOR_MIN_V) * slopeMpaPerVolt + FILTER_PRESSURE_MIN_MPA;
+  if (pressureMpa < FILTER_PRESSURE_MIN_MPA) pressureMpa = FILTER_PRESSURE_MIN_MPA;
+  if (pressureMpa > FILTER_PRESSURE_MAX_MPA) pressureMpa = FILTER_PRESSURE_MAX_MPA;
+
+  filterPressureMpa = pressureMpa;
+  Serial.printf("[PC] Filter pressure raw=%u adc=%.3fV sensor=%.3fV pressure=%.3fMPa\n",
+                adcRaw, adcVoltage, sensorVoltage, filterPressureMpa);
+  publishFilterPressure(filterPressureMpa);
+}
+
 unsigned long lastPumpVelocityChange = 0;
 void handlePumpControl(uint8_t velocity){
   if (now - lastPumpVelocityChange > PUMP_INTERVAL && currentPumpState != velocity)
   {
     switch(velocity) {
-      case 0: digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Stop pump
-      case 1: digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Level 1 = eco
-      case 2: digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Level 2
-      case 3: digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Level 3
+      case 0: pcf8575.digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Stop pump
+      case 1: pcf8575.digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Level 1 = eco
+      case 2: pcf8575.digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Level 2
+      case 3: pcf8575.digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Level 3
     }
-    Serial.print("Pump switching to level...");
+    Serial.print("[PC] Pump switching to level...");
     Serial.println(currentPumpState);
     publishPumpState(currentPumpState);
 
     delay(2000);
-    digitalWrite(PUMP_OFF, HIGH);
-    digitalWrite(PUMP_1, HIGH);
-    digitalWrite(PUMP_2, HIGH);
-    digitalWrite(PUMP_3, HIGH);
+    pcf8575.digitalWrite(PUMP_OFF, HIGH);
+    pcf8575.digitalWrite(PUMP_1, HIGH);
+    pcf8575.digitalWrite(PUMP_2, HIGH);
+    pcf8575.digitalWrite(PUMP_3, HIGH);
     lastPumpVelocityChange = now;
   }
 }
 
 unsigned long lastValveMovement = 0;
 void handleValveAndPumpControl(String position) {
-  Serial.printf("position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
+  Serial.printf("[PC] position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
   if (now - lastValveMovement <= VALVE_INTERVAL)
   {
     // Valve is still moving
@@ -364,14 +392,14 @@ void handleValveAndPumpControl(String position) {
 
   if (currentValveState != OPEN && currentValveState != CLOSED)
   {
-    digitalWrite(RELAY_POS2, HIGH); // Abschalten nach delay
-    digitalWrite(RELAY_POS4, HIGH); // Abschalten nach delay
+    pcf8575.digitalWrite(RELAY_POS2, HIGH); // switch off after delay
+    pcf8575.digitalWrite(RELAY_POS4, HIGH); // switch off after delay
     if (currentValveState == OPENING)
       currentValveState = OPEN;
     else if (currentValveState == CLOSING)
       currentValveState = CLOSED;
     lastValveMovement = 0;
-    Serial.printf("position: %s, now: %lu, lastValveMovement: %lu, VALVE_INTERVAL: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL);
+    Serial.printf("[PC] position: %s, now: %lu, lastValveMovement: %lu, VALVE_INTERVAL: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL);
     Serial.println("Valve movement finished");
   } 
 
@@ -379,9 +407,9 @@ void handleValveAndPumpControl(String position) {
       // Activate large loop (solar)
       if (currentValveState != OPEN)
       {
-        Serial.println("Valve opening...");
-        digitalWrite(RELAY_POS2, LOW);
-        digitalWrite(RELAY_POS4, HIGH); // Disable small loop
+        Serial.println("[PC] Valve opening...");
+        pcf8575.digitalWrite(RELAY_POS2, LOW);
+        pcf8575.digitalWrite(RELAY_POS4, HIGH); // Disable small loop
         lastValveMovement = now;
         currentValveState = OPENING;
       }
@@ -390,9 +418,9 @@ void handleValveAndPumpControl(String position) {
       // Activate small loop
       if (currentValveState != CLOSED)
       {
-        Serial.println("Valve closing...");
-        digitalWrite(RELAY_POS4, LOW);
-        digitalWrite(RELAY_POS2, HIGH); // Disable large loop
+        Serial.println("[PC] Valve closing...");
+        pcf8575.digitalWrite(RELAY_POS4, LOW);
+        pcf8575.digitalWrite(RELAY_POS2, HIGH); // Disable large loop
         lastValveMovement = now;
         currentValveState = CLOSING;
       }
@@ -415,15 +443,15 @@ void handleModes() {
       handleValveAndPumpControl("Pos4");
   } else if (mode == AUTO && validData) {
       if (averageTempAir-deltaTemp > averageTempWater && averageTempWater < targetTemp) {
-          Serial.println("handleModes: AUTO - Pos2");
+          Serial.println("[PC] handleModes: AUTO - Pos2");
           handleValveAndPumpControl("Pos2"); // Activate large loop
       } else if (averageTempAir <= averageTempWater || currentValveState == UNDEFINED) {
           handleValveAndPumpControl("Pos4"); // Activate small loop
-          Serial.println("handleModes: AUTO - Pos4");
+          Serial.println("[PC] handleModes: AUTO - Pos4");
       } else
       {
           handleValveAndPumpControl("----"); // No new valve position, stop valve movement if needed
-          Serial.println("handleModes: AUTO - Pos2 in Delta-Temp");
+          Serial.println("[PC] handleModes: AUTO - Pos2 in Delta-Temp");
       }
   }
 }
@@ -438,7 +466,7 @@ void printStatusBar(){
   }
   // WiFi Status
   lcd.setCursor(17, 3);
-  Serial.printf("WiFi signal: %d\n", WiFi.RSSI());
+  Serial.printf("[WIFI] Wifi signal: %d\n", WiFi.RSSI());
   if (WiFi.status() == WL_CONNECTED)
     lcd.print("\03");
   else

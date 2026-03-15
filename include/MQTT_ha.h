@@ -14,6 +14,7 @@ std::string mqtt_topic_ha_set_offsetAir = std::string(mqtt_topic_ha_base) + "/nu
 
 std::string mqtt_topic_ha_TempWater = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempWater/config";
 std::string mqtt_topic_ha_TempAir = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempAir/config";
+std::string mqtt_topic_ha_FilterPressure = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/FilterPressure/config";
 std::string mqtt_topic_ha_ValveState = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/valvestate/config";
 std::string mqtt_topic_ha_PumpState = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/pumpstate/config";
 std::string mqtt_topic_ha_mode = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/mode/config";
@@ -299,6 +300,37 @@ const char* mqtt_ha_config_TempAir = R"rawliteral({
   "unit_of_measurement": "°C",
   "unique_id": "poolcontrol_TempAir",
   "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_FilterPressure = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "icon": "mdi:gauge",
+  "name": "Filterdruck",
+  "object_id": "poolcontrol_FilterPressure",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_class": "measurement",
+  "state_topic": "poolcontrol/FilterPressure",
+  "unit_of_measurement": "MPa",
+  "unique_id": "poolcontrol_FilterPressure",
+  "value_template": "{{ value | float(0) }}"
 })rawliteral";
 
 const char* mqtt_ha_config_ValveState = R"rawliteral({
