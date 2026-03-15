@@ -6,6 +6,7 @@
 #include <OneWireESP32.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <UpdateOTA.h>
 #include <Credentials.h>
 #include <Globals.h>
@@ -24,6 +25,7 @@ void initMqttAfterWifi();
 
 static bool mqttInitialized = false;
 static bool lcdInitialized = false;
+static bool mdnsInitialized = false;
 
 void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("[WIFI] Disconnected from access point");
@@ -46,6 +48,17 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 
   // init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  if (!mdnsInitialized) {
+    if (MDNS.begin(hostname)) {
+      MDNS.addService("arduino", "tcp", 3232); // ArduinoOTA discovery
+      MDNS.addService("http", "tcp", 80);      // future web UI / status page
+      Serial.printf("[mDNS] Started: %s.local\n", hostname);
+      mdnsInitialized = true;
+    } else {
+      Serial.println("[mDNS] Failed to start");
+    }
+  }
 
   initMqttAfterWifi();
 }
