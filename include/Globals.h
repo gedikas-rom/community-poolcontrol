@@ -10,7 +10,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "1.0.2";
+const char* firmware = "1.0.3";
 
 // Pin definitions
 #define FILTER_PRESSURE_PIN 2   // Pin for filter pressure sensor (analog input)
