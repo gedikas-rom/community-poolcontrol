@@ -46,8 +46,8 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.print("[WIFI] MAC address: ");
   Serial.println(WiFi.macAddress());
 
-  // init and get the time
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  // init and get the time (DST-aware for Europe/Berlin)
+  configTzTime(tzInfo, ntpServer);
 
   if (!mdnsInitialized) {
     if (MDNS.begin(hostname)) {

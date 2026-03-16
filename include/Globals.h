@@ -75,9 +75,8 @@ ValveState currentValveState = UNDEFINED;
 int currentPumpState = 1;
 Mode mode = AUTO; 
 
-// Define the time zone offset and daylight saving time offset
-const long gmtOffset_sec = 3600; // GMT+1
-const int daylightOffset_sec = 3600; // Daylight saving time offset (1 hour)
+// Time zone (DST-aware): Central European Time with summer time rules
+const char* tzInfo = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 // NTP server to get the time
 const char* ntpServer = "pool.ntp.org"; // NTP server address
 
