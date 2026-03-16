@@ -51,11 +51,10 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
 
   if (!mdnsInitialized) {
     if (MDNS.begin(hostname)) {
-      MDNS.addService("arduino", "tcp", 3232); // ArduinoOTA discovery
+      // ArduinoOTA already registers the "arduino" mDNS service.
+      // Only add our own service(s) here to avoid duplicates.
       MDNS.addService("http", "tcp", 80);      // future web UI / status page
-      MDNS.addServiceTxt("arduino", "tcp", "fw", firmware);
       MDNS.addServiceTxt("http", "tcp", "fw", firmware);
-      MDNS.addServiceTxt("arduino", "tcp", "device", hostname);
       MDNS.addServiceTxt("http", "tcp", "device", hostname);
       Serial.printf("[mDNS] Started: %s.local\n", hostname);
       mdnsInitialized = true;
