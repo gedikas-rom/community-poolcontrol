@@ -207,7 +207,7 @@ void loop() {
   if (now - lastPrintDisplay > MEASUREMENT_INTERVAL) {
     Serial.printf("[WIFI] Wifi signal: %d\n", WiFi.RSSI());
     readTemperatures();
-    //readFilterPressure();
+    readFilterPressure();
     handleModes();
     refreshDisplay();
     lastPrintDisplay = now;
