@@ -67,6 +67,7 @@ extern int getCurrentPumpState();
 
 static uint8_t _pc_rxBuf[sizeof(uart_message)];
 static size_t  _pc_rxLen = 0;
+static bool    _hadNodeTraffic = false;
 
 // Send response to a node (Poolcontrol -> Bridge -> Node)
 static void sendToNode(const uint8_t *mac, const char *id, const char *payload) {
@@ -148,6 +149,7 @@ static void handleGetValues(const uint8_t *mac, const sensor_message &msg) {
 // Dispatcher: routes incoming messages
 static void dispatchMessage(const uint8_t *mac, const sensor_message &msg) {
     if (strcmp(msg.id, "get-values") == 0) {
+        _hadNodeTraffic = true;
         // Request from node -> assemble values and send back
         handleGetValues(mac, msg);
         return;
@@ -156,6 +158,8 @@ static void dispatchMessage(const uint8_t *mac, const sensor_message &msg) {
         sendToNode(mac, "bridge/ready", "");
         return;
     }
+
+    _hadNodeTraffic = true;
 
     JsonDocument doc;
 	DeserializationError error = deserializeJson(doc, msg.payload);
@@ -207,7 +211,7 @@ static void dispatchMessage(const uint8_t *mac, const sensor_message &msg) {
 }
 
 // Read UART and process frames
-void loopEspnowHandler() {
+bool loopEspnowHandler() {
     while (ESPNOW_SERIAL.available()) {
         uint8_t b = (uint8_t)ESPNOW_SERIAL.read();
 
@@ -235,6 +239,10 @@ void loopEspnowHandler() {
             }
         }
     }
+
+    const bool hadNodeTraffic = _hadNodeTraffic;
+    _hadNodeTraffic = false;
+    return hadNodeTraffic;
 }
 
 // Setup

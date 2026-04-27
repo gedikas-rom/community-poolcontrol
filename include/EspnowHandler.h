@@ -1,4 +1,4 @@
 #pragma once
 
 void setupEspnowHandler();
-void loopEspnowHandler();
+bool loopEspnowHandler();

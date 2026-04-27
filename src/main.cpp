@@ -27,6 +27,12 @@ static bool mqttInitialized = false;
 static bool lcdInitialized = false;
 static bool mdnsInitialized = false;
 
+// XIAO ESP32-C6 RF switch pins:
+// GPIO3  -> WiFi function enable (LOW = enabled)
+// GPIO14 -> antenna select (HIGH = external antenna, LOW = onboard antenna)
+static constexpr uint8_t XIAO_C6_WIFI_ENABLE_PIN = 3;
+static constexpr uint8_t XIAO_C6_WIFI_ANT_PIN    = 14;
+
 void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("[WIFI] Disconnected from access point");
   Serial.print("[WIFI] Lost connection. Reason: ");
@@ -97,13 +103,16 @@ void setup() {
 
   Serial.begin(115200);
   delay(1000);
-  // turn on the external antenna
-  pinMode(3, OUTPUT);
-  digitalWrite(3, LOW); //turn on this function
+
+#if defined(ARDUINO_XIAO_ESP32C6)
+  pinMode(XIAO_C6_WIFI_ENABLE_PIN, OUTPUT);
+  digitalWrite(XIAO_C6_WIFI_ENABLE_PIN, LOW);
   delay(100);
-  pinMode(14, OUTPUT); 
-  digitalWrite(14, HIGH);//use external antenna  
-  Serial.println("[PC] External antenna enabled");
+  pinMode(XIAO_C6_WIFI_ANT_PIN, OUTPUT);
+  digitalWrite(XIAO_C6_WIFI_ANT_PIN, HIGH);
+  Serial.println("[PC] XIAO C6 antenna set to EXTERNAL");
+#endif
+
   Serial.printf("[PC] LCD...Probing for PCF8574 on address 0x%02X...\n", LCD_ADDRESS);
 
   // See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device.
@@ -197,7 +206,9 @@ void loop() {
   // MQTT service loop
   loopMQTT();
   // Espnow service loop
-  loopEspnowHandler();
+  if (loopEspnowHandler()) {
+    lastESPNOWRequest = millis();
+  }
 
   now = millis();
   if (lcdInitialized && (now - lastDisplayOff > DISPLAY_OFF_INTERVAL)) {
@@ -492,6 +503,8 @@ void printStatusBar(){
   lcd.setCursor(19, 3);
   if (lastESPNOWRequest > 0 && now - lastESPNOWRequest < 20000)
     lcd.print("\06");
+  else
+    lcd.print(" ");
 }
 
 void printTempOnDisplay(){

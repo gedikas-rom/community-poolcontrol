@@ -10,17 +10,17 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "1.0.4";
+const char* firmware = "1.0.5"; // Firmware version
 
 // Pin definitions
 #define FILTER_PRESSURE_PIN 2   // Pin for filter pressure sensor (analog input)
-#define BUTTON_PIN P10          // pin P10 on PCF8575 connected to button
-#define RELAY_POS2 P1           // 3-way valve (open position = Pos2)
-#define RELAY_POS4 P2           // 3-way valve (closed position = Pos4)
-#define PUMP_OFF P4             // Pump off relay (red) pin P4 on PCF8575
-#define PUMP_1 P5               // Pump level 1 relay (brown) pin P5 on PCF8575
-#define PUMP_2 P6               // Pump level 2 relay (green) pin P6 on PCF8575
-#define PUMP_3 P7               // Pump level 3 relay (white) pin P7 on PCF8575
+#define BUTTON_PIN P13          // pin P10 on PCF8575 connected to button
+#define RELAY_POS2 P15           // 3-way valve (open position = Pos2)
+#define RELAY_POS4 P14           // 3-way valve (closed position = Pos4)
+#define PUMP_OFF P0             // Pump off relay (red) pin P4 on PCF8575
+#define PUMP_1 P1               // Pump level 1 relay (brown) pin P5 on PCF8575
+#define PUMP_2 P2               // Pump level 2 relay (green) pin P6 on PCF8575
+#define PUMP_3 P3               // Pump level 3 relay (white) pin P7 on PCF8575
 #define TEMP_WATER_PIN 1        // DS18B20 water temperature data line
 #define TEMP_AIR_PIN 0          // DS18B20 air temperature data line
 #define PUMPLEVEL_ECO 1         // Pump level 1 = eco
