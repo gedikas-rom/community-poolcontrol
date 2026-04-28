@@ -37,6 +37,7 @@
 #include <ArduinoJson.h>
 #include <GlobalDefs.h>
 #include "sensor_message.h"
+#include "EspnowHandler.h"
 
 // Configuration
 #define ESPNOW_SERIAL       Serial1
@@ -68,6 +69,7 @@ extern int getCurrentPumpState();
 static uint8_t _pc_rxBuf[sizeof(uart_message)];
 static size_t  _pc_rxLen = 0;
 static bool    _hadNodeTraffic = false;
+static bool    _hadBridgeUart = false;
 
 // Send response to a node (Poolcontrol -> Bridge -> Node)
 static void sendToNode(const uint8_t *mac, const char *id, const char *payload) {
@@ -211,12 +213,13 @@ static void dispatchMessage(const uint8_t *mac, const sensor_message &msg) {
 }
 
 // Read UART and process frames
-bool loopEspnowHandler() {
+uint8_t loopEspnowHandler() {
     while (ESPNOW_SERIAL.available()) {
         uint8_t b = (uint8_t)ESPNOW_SERIAL.read();
 
         if (b == '\n') {
             if (_pc_rxLen == sizeof(uart_message)) {
+                _hadBridgeUart = true;
                 uart_message umsg;
                 memcpy(&umsg, _pc_rxBuf, sizeof(uart_message));
                 umsg.msg.id[sizeof(umsg.msg.id) - 1]           = '\0';
@@ -240,9 +243,17 @@ bool loopEspnowHandler() {
         }
     }
 
-    const bool hadNodeTraffic = _hadNodeTraffic;
+    uint8_t events = ESPNOW_EVENT_NONE;
+    if (_hadBridgeUart) {
+        events |= ESPNOW_EVENT_BRIDGE_UART;
+    }
+    if (_hadNodeTraffic) {
+        events |= ESPNOW_EVENT_NODE_TRAFFIC;
+    }
+
+    _hadBridgeUart = false;
     _hadNodeTraffic = false;
-    return hadNodeTraffic;
+    return events;
 }
 
 // Setup

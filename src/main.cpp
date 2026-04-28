@@ -26,6 +26,7 @@ void initMqttAfterWifi();
 static bool mqttInitialized = false;
 static bool lcdInitialized = false;
 static bool mdnsInitialized = false;
+static unsigned long lastBridgeUartSeen = 0;
 
 // XIAO ESP32-C6 RF switch pins:
 // GPIO3  -> WiFi function enable (LOW = enabled)
@@ -206,7 +207,11 @@ void loop() {
   // MQTT service loop
   loopMQTT();
   // Espnow service loop
-  if (loopEspnowHandler()) {
+  const uint8_t espnowEvents = loopEspnowHandler();
+  if (espnowEvents & ESPNOW_EVENT_BRIDGE_UART) {
+    lastBridgeUartSeen = millis();
+  }
+  if (espnowEvents & ESPNOW_EVENT_NODE_TRAFFIC) {
     lastESPNOWRequest = millis();
   }
 
@@ -498,6 +503,13 @@ void printStatusBar(){
     lcd.print("\03");
   else
     lcd.print("\01");
+
+  // Bridge-UART Status
+  lcd.setCursor(18, 3);
+  if (lastBridgeUartSeen > 0 && now - lastBridgeUartSeen < 20000)
+    lcd.print("B");
+  else
+    lcd.print(" ");
 
   // ESP-NOW Status
   lcd.setCursor(19, 3);
