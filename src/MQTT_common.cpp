@@ -209,7 +209,7 @@ void publishValveState(ValveState state) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("[MQTT] Update - publishValveState: %d", state);
+  Serial.printf("[MQTT] Update - publishValveState: %d\n", state);
   mqtt.publish(mqtt_topic_valvestate, state == OPEN ? "OPEN" : state == CLOSED ? "CLOSED" : state == CLOSING ? "CLOSING" : state == OPENING ? "OPENING" : "UNDEFINED", true);
 }
 
@@ -227,7 +227,7 @@ void publishPumpState(int state) {
   if (!mqtt.connected()) {
     return;
   }
-  Serial.printf("[MQTT] Update - publishPumpState: %d", state);
+  Serial.printf("[MQTT] Update - publishPumpState: %d\n", state);
   char pumpStateStr[10];
   dtostrf(state, 1, 1, pumpStateStr);
   mqtt.publish(mqtt_topic_pumpstate, pumpStateStr, true);

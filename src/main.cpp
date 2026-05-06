@@ -151,11 +151,7 @@ void setup() {
 		Serial.printf("[PC] Air %d: 0x%llx,\n", j, addrAir[j]);
 	}
 
-  // PCF8575 init
-  pcf8575.begin();
-  Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X\n", PCF8575_ADDRESS);
-
-  // Configure pin modes
+  // Configure pin modes first (library uses this setup during begin())
   pcf8575.pinMode(RELAY_POS2, OUTPUT, HIGH); // Set relay pin as output and initialize to HIGH (off)
   pcf8575.pinMode(RELAY_POS4, OUTPUT, HIGH); // Set relay pin as output and initialize to HIGH (off)
   pcf8575.pinMode(PUMP_OFF, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
@@ -164,6 +160,10 @@ void setup() {
   pcf8575.pinMode(PUMP_3, OUTPUT, HIGH); // Set pump control pin as output and initialize to HIGH (off)
   // Button init
   pcf8575.pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with pull-up resistor
+
+  // PCF8575 init
+  pcf8575.begin();
+  Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X\n", PCF8575_ADDRESS);
   // Pressure sensor ADC input
   pinMode(FILTER_PRESSURE_PIN, INPUT);
 
@@ -391,26 +391,41 @@ void readFilterPressure() {
 }
 
 unsigned long lastPumpVelocityChange = 0;
-void handlePumpControl(uint8_t velocity){
-  if (now - lastPumpVelocityChange > PUMP_INTERVAL && currentPumpState != velocity)
-  {
-    switch(velocity) {
-      case 0: pcf8575.digitalWrite(PUMP_OFF, LOW); currentPumpState = 0; break; // Stop pump
-      case 1: pcf8575.digitalWrite(PUMP_1, LOW); currentPumpState = 1; break; // Level 1 = eco
-      case 2: pcf8575.digitalWrite(PUMP_2, LOW); currentPumpState = 2; break; // Level 2
-      case 3: pcf8575.digitalWrite(PUMP_3, LOW); currentPumpState = 3; break; // Level 3
-    }
-    Serial.print("[PC] Pump switching to level...");
-    Serial.println(currentPumpState);
-    publishPumpState(currentPumpState);
+static bool pumpStateInitialized = false;
 
-    delay(2000);
-    pcf8575.digitalWrite(PUMP_OFF, HIGH);
-    pcf8575.digitalWrite(PUMP_1, HIGH);
-    pcf8575.digitalWrite(PUMP_2, HIGH);
-    pcf8575.digitalWrite(PUMP_3, HIGH);
-    lastPumpVelocityChange = now;
+static uint8_t pumpRelayForVelocity(uint8_t velocity) {
+  switch (velocity) {
+    case 0: return PUMP_OFF;
+    case 1: return PUMP_1;
+    case 2: return PUMP_2;
+    case 3: return PUMP_3;
+    default: return PUMP_1;
   }
+}
+
+void handlePumpControl(uint8_t velocity){
+  const bool needsInit = !pumpStateInitialized;
+  const bool needsChange = currentPumpState != velocity;
+
+  if (!needsInit && !needsChange) return;
+  if (!needsInit && (now - lastPumpVelocityChange <= PUMP_INTERVAL)) return;
+
+  const uint8_t relay = pumpRelayForVelocity(velocity);
+  pcf8575.digitalWrite(relay, LOW);
+  currentPumpState = velocity;
+  pumpStateInitialized = true;
+
+  if (needsInit) {
+    Serial.print("[PC] Pump initialized to level...");
+  } else {
+    Serial.print("[PC] Pump switching to level...");
+  }
+  Serial.println(currentPumpState);
+  publishPumpState(currentPumpState);
+
+  delay(2000);
+  pcf8575.digitalWrite(relay, HIGH);
+  lastPumpVelocityChange = now;
 }
 
 unsigned long lastValveMovement = 0;
@@ -422,7 +437,9 @@ void handleValveAndPumpControl(String position) {
     return;
   }
 
-  if (currentValveState != OPEN && currentValveState != CLOSED)
+  // Only complete a movement if we were previously in a moving state.
+  // On startup (UNDEFINED), this block must not toggle relays.
+  if (currentValveState == OPENING || currentValveState == CLOSING)
   {
     pcf8575.digitalWrite(RELAY_POS2, HIGH); // switch off after delay
     pcf8575.digitalWrite(RELAY_POS4, HIGH); // switch off after delay
