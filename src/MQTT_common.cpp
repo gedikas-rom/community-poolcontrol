@@ -2,13 +2,11 @@
 #include <MQTT_ha.h>
 #include <WiFi.h>
 #include <GlobalDefs.h>
+#include <Credentials.h>
 
 PubSubClient mqtt;
-const char* mqtt_server = "192.168.179.23"; //"iobroker.fritz.box";
-const int mqtt_port = 1890;
-
-const char* mqtt_user = "";      // Optional
-const char* mqtt_password = "";  // Optional
+const char* mqtt_server = "192.168.179.21"; //"iobroker.fritz.box";
+const int mqtt_port = 1883;
 
 const char* mqtt_topic_state = "poolcontrol/state";
 const char* mqtt_topic_firmware = "poolcontrol/firmware";  // aktuelle Firmware Version
@@ -94,8 +92,8 @@ bool connectMQTT() {
   
   // Verbindungsversuch mit Credentials
   bool connected = false;
-  if (mqtt_user && mqtt_password) {
-    connected = mqtt.connect(clientId.c_str(), mqtt_user, mqtt_password, 
+  if (MQTT_user[0] != '\0' && MQTT_password[0] != '\0') {
+    connected = mqtt.connect(clientId.c_str(), MQTT_user, MQTT_password, 
       mqtt_topic_state, 1, true, "offline");
   } else {
     connected = mqtt.connect(clientId.c_str(), mqtt_topic_state, 1, true, "offline");
