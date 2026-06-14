@@ -376,17 +376,24 @@ void readFilterPressure() {
   const float slopeMpaPerVolt = (FILTER_PRESSURE_MAX_MPA - FILTER_PRESSURE_MIN_MPA) /
                                 (FILTER_PRESSURE_SENSOR_MAX_V - FILTER_PRESSURE_SENSOR_MIN_V);
 
-  const uint16_t adcRaw = analogRead(FILTER_PRESSURE_PIN);
+  uint32_t adcRawSum = 0;
+  for (uint8_t sample = 0; sample < FILTER_PRESSURE_SAMPLE_COUNT; sample++) {
+    adcRawSum += analogRead(FILTER_PRESSURE_PIN);
+    delay(2);
+  }
+
+  const uint16_t adcRaw = adcRawSum / FILTER_PRESSURE_SAMPLE_COUNT;
   const float adcVoltage = (static_cast<float>(adcRaw) / adcMax) * adcRefVoltage;
   const float sensorVoltage = adcVoltage * dividerFactor;
 
   float pressureMpa = (sensorVoltage - FILTER_PRESSURE_SENSOR_MIN_V) * slopeMpaPerVolt + FILTER_PRESSURE_MIN_MPA;
+  pressureMpa *= FILTER_PRESSURE_CALIBRATION_FACTOR;
   if (pressureMpa < FILTER_PRESSURE_MIN_MPA) pressureMpa = FILTER_PRESSURE_MIN_MPA;
   if (pressureMpa > FILTER_PRESSURE_MAX_MPA) pressureMpa = FILTER_PRESSURE_MAX_MPA;
 
   filterPressureMpa = pressureMpa;
-  Serial.printf("[PC] Filter pressure raw=%u adc=%.3fV sensor=%.3fV pressure=%.3fMPa\n",
-                adcRaw, adcVoltage, sensorVoltage, filterPressureMpa);
+  Serial.printf("[PC] Filter pressure raw=%u adc=%.3fV sensor=%.3fV pressure=%.3fMPa factor=%.2f\n",
+                adcRaw, adcVoltage, sensorVoltage, filterPressureMpa, FILTER_PRESSURE_CALIBRATION_FACTOR);
   publishFilterPressure(filterPressureMpa);
 }
 
