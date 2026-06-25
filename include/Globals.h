@@ -10,7 +10,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "1.0.10"; // Firmware version
+const char* firmware = "1.0.12"; // Firmware version
 
 // Pin definitions
 #define FILTER_PRESSURE_PIN 2   // Pin for filter pressure sensor (analog input)
@@ -30,15 +30,16 @@ const char* firmware = "1.0.10"; // Firmware version
 #define DISPLAY_OFF_INTERVAL 600000 // Auto Display off after 10 minutes 
 #define MEASUREMENT_INTERVAL 3000 // Refesh measurements and display refresh 
 #define WIFI_RECONNECT_INTERVAL 5000
-#define VALVE_INTERVAL 70000 // Valve movement time
+#define VALVE_INTERVAL 90000 // Valve movement time
 #define PUMP_INTERVAL 5000 // Pump movement time
 
-// Pressure sensor calibration (sensor: 0.5V..4.5V => 0..4 MPa at sensor output)
+// Pressure sensor calibration (nominal sensor: 0.5V..4.5V => 0..4 MPa at sensor output)
 // Voltage divider correction: Vadc = Vsensor * (R2 / (R1 + R2))
 // Example values: R1=10k (sensor->ADC), R2=27k (ADC->GND)
+// MIN_V is adjusted below the nominal 0.5V zero point for the installed sensor/divider.
 #define FILTER_PRESSURE_R1_OHM 10000.0f
 #define FILTER_PRESSURE_R2_OHM 27000.0f
-#define FILTER_PRESSURE_SENSOR_MIN_V 0.5f
+#define FILTER_PRESSURE_SENSOR_MIN_V 0.45f
 #define FILTER_PRESSURE_SENSOR_MAX_V 4.5f
 #define FILTER_PRESSURE_MIN_MPA 0.0f
 #define FILTER_PRESSURE_MAX_MPA 4.0f

@@ -376,13 +376,15 @@ void readFilterPressure() {
   const float slopeMpaPerVolt = (FILTER_PRESSURE_MAX_MPA - FILTER_PRESSURE_MIN_MPA) /
                                 (FILTER_PRESSURE_SENSOR_MAX_V - FILTER_PRESSURE_SENSOR_MIN_V);
 
-  uint32_t adcRawSum = 0;
+  uint16_t adcRaw = 0;
   for (uint8_t sample = 0; sample < FILTER_PRESSURE_SAMPLE_COUNT; sample++) {
-    adcRawSum += analogRead(FILTER_PRESSURE_PIN);
+    uint16_t adcSample = analogRead(FILTER_PRESSURE_PIN);
+    if (adcSample > adcRaw) {
+      adcRaw = adcSample;
+    }
     delay(2);
   }
 
-  const uint16_t adcRaw = adcRawSum / FILTER_PRESSURE_SAMPLE_COUNT;
   const float adcVoltage = (static_cast<float>(adcRaw) / adcMax) * adcRefVoltage;
   const float sensorVoltage = adcVoltage * dividerFactor;
 
