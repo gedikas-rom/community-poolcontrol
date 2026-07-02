@@ -5,7 +5,9 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
     void (*targetTempChangedFunction)(float targetTemp),
     void (*deltaTempChangedFunction)(float deltaTemp),
     void (*offsetWaterChangedFunction)(float offsetWater),
-    void (*offsetAirChangedFunction)(float offsetAir));
+    void (*offsetAirChangedFunction)(float offsetAir),
+    void (*pressureSensorMinVChangedFunction)(float sensorMinV),
+    void (*pressureCalibrationFactorChangedFunction)(float calibrationFactor));
 void loopMQTT();
 void publishPreferences(Mode mode, ValveState valvestate, int state, float targetTemp, float deltaTemp, float offsetWater, float offsetAir);
 void publishTemperatures(float averageTempWater, float averageTempAir);
@@ -17,6 +19,7 @@ void publishTargetTemp(float targetTemp);
 void publishDeltaTemp(float deltaTemp);
 void publishOffsetWater(float offsetWater);
 void publishOffsetAir(float offsetAir);
+void publishPressureCalibration(float sensorMinV, float calibrationFactor);
 void publishPavilionSensorData(float temp, int battery, const char* firmware);
 void publishGreenhouseSensorData(float temp, int battery, const char* firmware);
 void publishBridgeFirmware(const char* firmware);

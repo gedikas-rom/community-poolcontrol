@@ -39,11 +39,11 @@ const char* firmware = "1.0.12"; // Firmware version
 // MIN_V is adjusted below the nominal 0.5V zero point for the installed sensor/divider.
 #define FILTER_PRESSURE_R1_OHM 10000.0f
 #define FILTER_PRESSURE_R2_OHM 27000.0f
-#define FILTER_PRESSURE_SENSOR_MIN_V 0.45f
+#define FILTER_PRESSURE_SENSOR_MIN_V_DEFAULT 0.45f
 #define FILTER_PRESSURE_SENSOR_MAX_V 4.5f
 #define FILTER_PRESSURE_MIN_MPA 0.0f
 #define FILTER_PRESSURE_MAX_MPA 4.0f
-#define FILTER_PRESSURE_CALIBRATION_FACTOR 1.8f
+#define FILTER_PRESSURE_CALIBRATION_FACTOR_DEFAULT 1.8f
 #define FILTER_PRESSURE_SAMPLE_COUNT 16
 
 #define PCF8575_ADDRESS 0x20 // PCF8575 I2C address (default: 0x20, can be 0x21-0x27 depending on A0-A2 pin configuration)
@@ -70,6 +70,8 @@ float currTempAir[maxDevices];
 float averageTempWater = -1;
 float averageTempAir = -1;
 float filterPressureMpa = -1;
+float filterPressureSensorMinV = FILTER_PRESSURE_SENSOR_MIN_V_DEFAULT;
+float filterPressureCalibrationFactor = FILTER_PRESSURE_CALIBRATION_FACTOR_DEFAULT;
 float offsetWater = 1.5f; // Offset for water temperature
 float offsetAir = 0.0f; // Offset for air temperature
 float targetTemp = 25.0f; // Target water temperature

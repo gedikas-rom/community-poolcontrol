@@ -20,12 +20,16 @@ const char* mqtt_topic_deltaTemp = "poolcontrol/DeltaTemp";  // deltaTemp
 const char* mqtt_topic_offsetWater = "poolcontrol/offsetWater";  // offsetWater
 const char* mqtt_topic_offsetAir = "poolcontrol/offsetAir";  // offsetAir
 const char* mqtt_topic_FilterPressure = "poolcontrol/FilterPressure";  // filter pressure in MPa
+const char* mqtt_topic_pressureSensorMinV = "poolcontrol/pressure/sensor_min_v";
+const char* mqtt_topic_pressureCalibrationFactor = "poolcontrol/pressure/calibration_factor";
 
 const char* mqtt_topic_set_mode = "poolcontrol/set/mode";  // topic for setting mode
 const char* mqtt_topic_set_targetTemp = "poolcontrol/set/targettemp";  // topic for setting targetTemp
 const char* mqtt_topic_set_deltaTemp = "poolcontrol/set/deltatemp";  // topic for setting deltaTemp
 const char* mqtt_topic_set_offsetWater = "poolcontrol/set/offsetWater";  // topic for setting offsetWater
 const char* mqtt_topic_set_offsetAir = "poolcontrol/set/offsetAir";  // topic for setting offsetAir
+const char* mqtt_topic_set_pressureSensorMinV = "poolcontrol/set/pressure/sensor_min_v";
+const char* mqtt_topic_set_pressureCalibrationFactor = "poolcontrol/set/pressure/calibration_factor";
 
 const char* mqtt_topic_PavilionTemp = "poolcontrol/PavilionTemp";  // PavilionTemp
 const char* mqtt_topic_PavilionBattery = "poolcontrol/PavilionBattery";  // PavilionBattery
@@ -46,6 +50,8 @@ void (*_targetTempChangedFunction)(float targetTemp);
 void (*_deltaTempChangedFunction)(float deltaTemp);
 void (*_offsetWaterChangedFunction)(float offsetWater);
 void (*_offsetAirChangedFunction)(float offsetAir);
+void (*_pressureSensorMinVChangedFunction)(float sensorMinV);
+void (*_pressureCalibrationFactorChangedFunction)(float calibrationFactor);
 
 void publishValveState(ValveState state);
 void publishPumpState(int state);
@@ -77,6 +83,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     _offsetWaterChangedFunction(atof(message));
   } else if (String(topic) == mqtt_topic_set_offsetAir) {
     _offsetAirChangedFunction(atof(message));
+  } else if (String(topic) == mqtt_topic_set_pressureSensorMinV) {
+    _pressureSensorMinVChangedFunction(atof(message));
+  } else if (String(topic) == mqtt_topic_set_pressureCalibrationFactor) {
+    _pressureCalibrationFactorChangedFunction(atof(message));
   }
 }
 
@@ -109,6 +119,8 @@ bool connectMQTT() {
     mqtt.subscribe(mqtt_topic_set_deltaTemp);
     mqtt.subscribe(mqtt_topic_set_offsetWater);
     mqtt.subscribe(mqtt_topic_set_offsetAir);
+    mqtt.subscribe(mqtt_topic_set_pressureSensorMinV);
+    mqtt.subscribe(mqtt_topic_set_pressureCalibrationFactor);
     
     // Setting Homeassistant sensor config
     Serial.println("[MQTT] --> HA Config");
@@ -122,6 +134,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_TempWater.c_str(), mqtt_ha_config_TempWater, true);
     mqtt.publish(mqtt_topic_ha_TempAir.c_str(), mqtt_ha_config_TempAir, true);
     mqtt.publish(mqtt_topic_ha_FilterPressure.c_str(), mqtt_ha_config_FilterPressure, true);
+    mqtt.publish(mqtt_topic_ha_pressureSensorMinV.c_str(), mqtt_ha_config_pressureSensorMinV, true);
+    mqtt.publish(mqtt_topic_ha_pressureCalibrationFactor.c_str(), mqtt_ha_config_pressureCalibrationFactor, true);
     mqtt.publish(mqtt_topic_ha_ValveState.c_str(), mqtt_ha_config_ValveState, true);
     mqtt.publish(mqtt_topic_ha_PumpState.c_str(), mqtt_ha_config_PumpState, true);
     mqtt.publish(mqtt_topic_ha_mode.c_str(), mqtt_ha_config_mode, true);
@@ -279,6 +293,23 @@ void publishOffsetAir(float offsetAir) {
   mqtt.publish(mqtt_topic_offsetAir, offsetAirStr, true);
 }
 
+void publishPressureCalibration(float sensorMinV, float calibrationFactor) {
+  if (!mqtt.connected()) {
+    return;
+  }
+
+  Serial.printf("[MQTT] Update - publishPressureCalibration: minV=%.3f, factor=%.2f\n",
+                sensorMinV, calibrationFactor);
+
+  char sensorMinVStr[12];
+  char calibrationFactorStr[12];
+  snprintf(sensorMinVStr, sizeof(sensorMinVStr), "%.3f", sensorMinV);
+  snprintf(calibrationFactorStr, sizeof(calibrationFactorStr), "%.2f", calibrationFactor);
+
+  mqtt.publish(mqtt_topic_pressureSensorMinV, sensorMinVStr, true);
+  mqtt.publish(mqtt_topic_pressureCalibrationFactor, calibrationFactorStr, true);
+}
+
 void publishPavilionSensorData(float temp, int battery, const char* firmware) {
   if (!mqtt.connected()) {
     return;
@@ -324,13 +355,17 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
     void (*targetTempChangedFunction)(float targetTemp),
     void (*deltaTempChangedFunction)(float deltaTemp),
     void (*offsetWaterChangedFunction)(float offsetWater),
-    void (*offsetAirChangedFunction)(float offsetAir)) 
+    void (*offsetAirChangedFunction)(float offsetAir),
+    void (*pressureSensorMinVChangedFunction)(float sensorMinV),
+    void (*pressureCalibrationFactorChangedFunction)(float calibrationFactor)) 
 {
     _modeChangedFunction = modeChangedFunction;
     _targetTempChangedFunction = targetTempChangedFunction;
     _deltaTempChangedFunction = deltaTempChangedFunction;
     _offsetWaterChangedFunction = offsetWaterChangedFunction;
     _offsetAirChangedFunction = offsetAirChangedFunction;
+    _pressureSensorMinVChangedFunction = pressureSensorMinVChangedFunction;
+    _pressureCalibrationFactorChangedFunction = pressureCalibrationFactorChangedFunction;
     _firmware = firmware;
     mqtt.setClient(espClient);
     mqtt.setServer(mqtt_server, mqtt_port);

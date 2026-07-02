@@ -11,6 +11,8 @@ std::string mqtt_topic_ha_set_targetTemp = std::string(mqtt_topic_ha_base) + "/n
 std::string mqtt_topic_ha_set_deltaTemp = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/deltaTemp/config";
 std::string mqtt_topic_ha_set_offsetWater = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/offsetWater/config";
 std::string mqtt_topic_ha_set_offsetAir = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/offsetAir/config";
+std::string mqtt_topic_ha_pressureSensorMinV = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/pressureSensorMinV/config";
+std::string mqtt_topic_ha_pressureCalibrationFactor = std::string(mqtt_topic_ha_base) + "/number/poolcontrol/pressureCalibrationFactor/config";
 
 std::string mqtt_topic_ha_TempWater = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempWater/config";
 std::string mqtt_topic_ha_TempAir = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/TempAir/config";
@@ -239,6 +241,78 @@ const char* mqtt_ha_config_set_offsetAir = R"rawliteral({
   "state_topic": "poolcontrol/offsetAir",
   "unit_of_measurement": "",
   "unique_id": "poolcontrol_set_offsetAir",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_pressureSensorMinV = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "command_topic": "poolcontrol/set/pressure/sensor_min_v",
+  "mode": "box",
+  "min": 0.3,
+  "max": 0.8,
+  "step": 0.01,
+  "enabled_by_default": true,
+  "entity_category": "config",
+  "icon": "mdi:gauge-empty",
+  "name": "Drucksensor Nullpunkt",
+  "object_id": "poolcontrol_pressureSensorMinV",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/pressure/sensor_min_v",
+  "unit_of_measurement": "V",
+  "unique_id": "poolcontrol_pressureSensorMinV",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_pressureCalibrationFactor = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "command_topic": "poolcontrol/set/pressure/calibration_factor",
+  "mode": "box",
+  "min": 0.1,
+  "max": 10,
+  "step": 0.1,
+  "enabled_by_default": true,
+  "entity_category": "config",
+  "icon": "mdi:gauge",
+  "name": "Druck Kalibrierfaktor",
+  "object_id": "poolcontrol_pressureCalibrationFactor",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/pressure/calibration_factor",
+  "unit_of_measurement": "",
+  "unique_id": "poolcontrol_pressureCalibrationFactor",
   "value_template": "{{ value }}"
 })rawliteral";
 

@@ -7,6 +7,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <Preferences.h>
 #include <UpdateOTA.h>
 #include <Credentials.h>
 #include <Globals.h>
@@ -20,13 +21,21 @@ void targetTempChangedFunction(float targetTemp);
 void deltaTempChangedFunction(float deltaTemp);
 void offsetWaterChangedFunction(float offsetWater);
 void offsetAirChangedFunction(float offsetAir);
+void pressureSensorMinVChangedFunction(float sensorMinV);
+void pressureCalibrationFactorChangedFunction(float calibrationFactor);
 void setupWiFi();
 void initMqttAfterWifi();
+void loadPressureCalibration();
+void savePressureCalibration();
 
 static bool mqttInitialized = false;
 static bool lcdInitialized = false;
 static bool mdnsInitialized = false;
 static unsigned long lastBridgeUartSeen = 0;
+static Preferences preferences;
+static const char* preferencesNamespace = "poolcontrol";
+static const char* prefPressureMinV = "press_min_v";
+static const char* prefPressureFactor = "press_factor";
 
 // XIAO ESP32-C6 RF switch pins:
 // GPIO3  -> WiFi function enable (LOW = enabled)
@@ -78,9 +87,11 @@ void initMqttAfterWifi() {
 
   Serial.println("[MQTT] Initializing after WiFi got IP");
   setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction,
-    offsetWaterChangedFunction, offsetAirChangedFunction);
+    offsetWaterChangedFunction, offsetAirChangedFunction, pressureSensorMinVChangedFunction,
+    pressureCalibrationFactorChangedFunction);
   Serial.println("[MQTT] Publishing initial preferences");
   publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp, offsetWater, offsetAir);
+  publishPressureCalibration(filterPressureSensorMinV, filterPressureCalibrationFactor);
   Serial.println("[MQTT] Initialization complete");
   mqttInitialized = true;
 }
@@ -104,6 +115,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(1000);
+  loadPressureCalibration();
 
 #if defined(ARDUINO_XIAO_ESP32C6)
   pinMode(XIAO_C6_WIFI_ENABLE_PIN, OUTPUT);
@@ -285,6 +297,50 @@ void offsetAirChangedFunction(float incomingOffsetAir) {
   }
 }
 
+void loadPressureCalibration() {
+  preferences.begin(preferencesNamespace, true);
+  filterPressureSensorMinV = preferences.getFloat(prefPressureMinV, FILTER_PRESSURE_SENSOR_MIN_V_DEFAULT);
+  filterPressureCalibrationFactor = preferences.getFloat(prefPressureFactor, FILTER_PRESSURE_CALIBRATION_FACTOR_DEFAULT);
+  preferences.end();
+
+  if (filterPressureSensorMinV < 0.3f || filterPressureSensorMinV > 0.8f) {
+    filterPressureSensorMinV = FILTER_PRESSURE_SENSOR_MIN_V_DEFAULT;
+  }
+  if (filterPressureCalibrationFactor < 0.1f || filterPressureCalibrationFactor > 10.0f) {
+    filterPressureCalibrationFactor = FILTER_PRESSURE_CALIBRATION_FACTOR_DEFAULT;
+  }
+
+  Serial.printf("[PC] Pressure calibration loaded: minV=%.3f factor=%.2f\n",
+                filterPressureSensorMinV, filterPressureCalibrationFactor);
+}
+
+void savePressureCalibration() {
+  preferences.begin(preferencesNamespace, false);
+  preferences.putFloat(prefPressureMinV, filterPressureSensorMinV);
+  preferences.putFloat(prefPressureFactor, filterPressureCalibrationFactor);
+  preferences.end();
+}
+
+void pressureSensorMinVChangedFunction(float incomingSensorMinV) {
+  Serial.printf("[PC] Pressure sensor min voltage changed to: %.3f\n", incomingSensorMinV);
+  if (incomingSensorMinV >= 0.3f && incomingSensorMinV <= 0.8f)
+  {
+    filterPressureSensorMinV = incomingSensorMinV;
+    savePressureCalibration();
+    publishPressureCalibration(filterPressureSensorMinV, filterPressureCalibrationFactor);
+  }
+}
+
+void pressureCalibrationFactorChangedFunction(float incomingCalibrationFactor) {
+  Serial.printf("[PC] Pressure calibration factor changed to: %.2f\n", incomingCalibrationFactor);
+  if (incomingCalibrationFactor >= 0.1f && incomingCalibrationFactor <= 10.0f)
+  {
+    filterPressureCalibrationFactor = incomingCalibrationFactor;
+    savePressureCalibration();
+    publishPressureCalibration(filterPressureSensorMinV, filterPressureCalibrationFactor);
+  }
+}
+
 float getAverageTempWater() {
   return averageTempWater;
 } 
@@ -374,7 +430,7 @@ void readFilterPressure() {
   const float adcRefVoltage = 3.3f;
   const float dividerFactor = (FILTER_PRESSURE_R1_OHM + FILTER_PRESSURE_R2_OHM) / FILTER_PRESSURE_R2_OHM;
   const float slopeMpaPerVolt = (FILTER_PRESSURE_MAX_MPA - FILTER_PRESSURE_MIN_MPA) /
-                                (FILTER_PRESSURE_SENSOR_MAX_V - FILTER_PRESSURE_SENSOR_MIN_V);
+                                (FILTER_PRESSURE_SENSOR_MAX_V - filterPressureSensorMinV);
 
   uint16_t adcRaw = 0;
   for (uint8_t sample = 0; sample < FILTER_PRESSURE_SAMPLE_COUNT; sample++) {
@@ -388,14 +444,15 @@ void readFilterPressure() {
   const float adcVoltage = (static_cast<float>(adcRaw) / adcMax) * adcRefVoltage;
   const float sensorVoltage = adcVoltage * dividerFactor;
 
-  float pressureMpa = (sensorVoltage - FILTER_PRESSURE_SENSOR_MIN_V) * slopeMpaPerVolt + FILTER_PRESSURE_MIN_MPA;
-  pressureMpa *= FILTER_PRESSURE_CALIBRATION_FACTOR;
+  float pressureMpa = (sensorVoltage - filterPressureSensorMinV) * slopeMpaPerVolt + FILTER_PRESSURE_MIN_MPA;
+  pressureMpa *= filterPressureCalibrationFactor;
   if (pressureMpa < FILTER_PRESSURE_MIN_MPA) pressureMpa = FILTER_PRESSURE_MIN_MPA;
   if (pressureMpa > FILTER_PRESSURE_MAX_MPA) pressureMpa = FILTER_PRESSURE_MAX_MPA;
 
   filterPressureMpa = pressureMpa;
-  Serial.printf("[PC] Filter pressure raw=%u adc=%.3fV sensor=%.3fV pressure=%.3fMPa factor=%.2f\n",
-                adcRaw, adcVoltage, sensorVoltage, filterPressureMpa, FILTER_PRESSURE_CALIBRATION_FACTOR);
+  Serial.printf("[PC] Filter pressure raw=%u adc=%.3fV sensor=%.3fV pressure=%.3fMPa minV=%.3f factor=%.2f\n",
+                adcRaw, adcVoltage, sensorVoltage, filterPressureMpa, filterPressureSensorMinV,
+                filterPressureCalibrationFactor);
   publishFilterPressure(filterPressureMpa);
 }
 
