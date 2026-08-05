@@ -71,6 +71,18 @@ static size_t  _pc_rxLen = 0;
 static bool    _hadNodeTraffic = false;
 static bool    _hadBridgeUart = false;
 
+static void dispatchMessage(const uint8_t *mac, const sensor_message &msg);
+
+static void handleUartMessage(const uint8_t *data) {
+    _hadBridgeUart = true;
+    uart_message umsg;
+    memcpy(&umsg, data, sizeof(uart_message));
+    umsg.msg.id[sizeof(umsg.msg.id) - 1]           = '\0';
+    umsg.msg.payload[sizeof(umsg.msg.payload) - 1] = '\0';
+
+    dispatchMessage(umsg.mac, umsg.msg);
+}
+
 // Send response to a node (Poolcontrol -> Bridge -> Node)
 static void sendToNode(const uint8_t *mac, const char *id, const char *payload) {
     uart_message umsg;
@@ -217,29 +229,17 @@ uint8_t loopEspnowHandler() {
     while (ESPNOW_SERIAL.available()) {
         uint8_t b = (uint8_t)ESPNOW_SERIAL.read();
 
-        if (b == '\n') {
-            if (_pc_rxLen == sizeof(uart_message)) {
-                _hadBridgeUart = true;
-                uart_message umsg;
-                memcpy(&umsg, _pc_rxBuf, sizeof(uart_message));
-                umsg.msg.id[sizeof(umsg.msg.id) - 1]           = '\0';
-                umsg.msg.payload[sizeof(umsg.msg.payload) - 1] = '\0';
+        if (_pc_rxLen == 0 && b == '\n') {
+            continue;
+        }
 
-                dispatchMessage(umsg.mac, umsg.msg);
+        if (_pc_rxLen < sizeof(_pc_rxBuf)) {
+            _pc_rxBuf[_pc_rxLen++] = b;
+        }
 
-            } else if (_pc_rxLen > 0) {
-                Serial.printf("[ESPNOW] Invalid UART length: %d (expected %d)\n",
-                              _pc_rxLen, sizeof(uart_message));
-            }
+        if (_pc_rxLen == sizeof(uart_message)) {
+            handleUartMessage(_pc_rxBuf);
             _pc_rxLen = 0;
-
-        } else {
-            if (_pc_rxLen < sizeof(_pc_rxBuf)) {
-                _pc_rxBuf[_pc_rxLen++] = b;
-            } else {
-                Serial.println("[ESPNOW] UART Buffer Overflow – re-sync.");
-                _pc_rxLen = 0;
-            }
         }
     }
 

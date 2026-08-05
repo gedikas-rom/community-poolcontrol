@@ -30,6 +30,7 @@ void savePressureCalibration();
 
 static bool mqttInitialized = false;
 static bool lcdInitialized = false;
+static bool pcf8575Initialized = false;
 static bool mdnsInitialized = false;
 static unsigned long lastBridgeUartSeen = 0;
 static Preferences preferences;
@@ -114,7 +115,7 @@ void setup() {
   int error;
 
   Serial.begin(115200);
-  delay(1000);
+  delay(2000);
   loadPressureCalibration();
 
 #if defined(ARDUINO_XIAO_ESP32C6)
@@ -174,8 +175,10 @@ void setup() {
   pcf8575.pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with pull-up resistor
 
   // PCF8575 init
-  pcf8575.begin();
-  Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X\n", PCF8575_ADDRESS);
+  pcf8575Initialized = pcf8575.begin();
+  Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X: %s\n",
+                PCF8575_ADDRESS,
+                pcf8575Initialized ? "found" : "not found");
   // Pressure sensor ADC input
   pinMode(FILTER_PRESSURE_PIN, INPUT);
 
@@ -242,15 +245,17 @@ void loop() {
   }
 
   // read the state of the switch/button:
-  currentState = pcf8575.digitalRead(BUTTON_PIN);
+  if (pcf8575Initialized) {
+    currentState = pcf8575.digitalRead(BUTTON_PIN);
 
-  if(lcdInitialized && lastState == HIGH && currentState == LOW)
-  {
-    lcd.setBacklight(255);
-    lastDisplayOff = now;
+    if(lcdInitialized && lastState == HIGH && currentState == LOW)
+    {
+      lcd.setBacklight(255);
+      lastDisplayOff = now;
+    }
+    // save the last state
+    lastState = currentState;
   }
-  // save the last state
-  lastState = currentState;
   
 }  // loop()
 
@@ -470,6 +475,8 @@ static uint8_t pumpRelayForVelocity(uint8_t velocity) {
 }
 
 void handlePumpControl(uint8_t velocity){
+  if (!pcf8575Initialized) return;
+
   const bool needsInit = !pumpStateInitialized;
   const bool needsChange = currentPumpState != velocity;
 
@@ -496,6 +503,8 @@ void handlePumpControl(uint8_t velocity){
 
 unsigned long lastValveMovement = 0;
 void handleValveAndPumpControl(String position) {
+  if (!pcf8575Initialized) return;
+
   Serial.printf("[PC] position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
   if (now - lastValveMovement <= VALVE_INTERVAL)
   {

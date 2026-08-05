@@ -10,7 +10,7 @@
 #define GLOBALS_ 
 
 const char* hostname = "poolcontrol";
-const char* firmware = "1.0.12"; // Firmware version
+const char* firmware = "1.0.13"; // Firmware version
 
 // Pin definitions
 #define FILTER_PRESSURE_PIN 2   // Pin for filter pressure sensor (analog input)
@@ -46,7 +46,7 @@ const char* firmware = "1.0.12"; // Firmware version
 #define FILTER_PRESSURE_CALIBRATION_FACTOR_DEFAULT 1.8f
 #define FILTER_PRESSURE_SAMPLE_COUNT 16
 
-#define PCF8575_ADDRESS 0x20 // PCF8575 I2C address (default: 0x20, can be 0x21-0x27 depending on A0-A2 pin configuration)
+#define PCF8575_ADDRESS 0x21 // PCF8575 I2C address (default: 0x20, can be 0x21-0x27 depending on A0-A2 pin configuration)
 #define LCD_ADDRESS 0x27 // LCD I2C address (default: 0x27, can be 0x3F depending on the module)
 
 // Variables will change:
