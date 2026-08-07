@@ -15,6 +15,13 @@
 #include "time.h"
 #include "EspnowHandler.h"
 #include "PCF8575.h"
+#include <esp_task_wdt.h>
+#include <esp_system.h>
+
+// If loop() doesn't come back around within this many seconds (stuck I2C
+// transaction, blocking call, etc.), the task watchdog reboots the device
+// instead of leaving it frozen until someone power-cycles it.
+static const uint32_t TASK_WDT_TIMEOUT_S = 15;
 
 void modeChangedFunction(Mode mode);
 void targetTempChangedFunction(float targetTemp);
@@ -25,6 +32,7 @@ void pressureSensorMinVChangedFunction(float sensorMinV);
 void pressureCalibrationFactorChangedFunction(float calibrationFactor);
 void setupWiFi();
 void initMqttAfterWifi();
+void onMqttConnected();
 void loadPressureCalibration();
 void savePressureCalibration();
 
@@ -44,12 +52,44 @@ static const char* prefPressureFactor = "press_factor";
 static constexpr uint8_t XIAO_C6_WIFI_ENABLE_PIN = 3;
 static constexpr uint8_t XIAO_C6_WIFI_ANT_PIN    = 14;
 
+static const char* resetReasonToString(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:   return "Power-on";
+    case ESP_RST_EXT:       return "External reset pin";
+    case ESP_RST_SW:        return "Software (ESP.restart)";
+    case ESP_RST_PANIC:     return "Panic / exception";
+    case ESP_RST_INT_WDT:   return "Interrupt watchdog";
+    case ESP_RST_TASK_WDT:  return "Task watchdog (loop() got stuck)";
+    case ESP_RST_WDT:       return "Other watchdog";
+    case ESP_RST_DEEPSLEEP: return "Woke from deep sleep";
+    case ESP_RST_BROWNOUT:  return "Brownout (power dip)";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "Unknown";
+  }
+}
+
+static void scanI2CBus() {
+  Serial.println("[PC] I2C bus scan...");
+  uint8_t found = 0;
+  for (uint8_t address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("[PC] I2C device found at address 0x%02X\n", address);
+      found++;
+    }
+  }
+  if (found == 0) {
+    Serial.println("[PC] I2C scan: no devices found");
+  } else {
+    Serial.printf("[PC] I2C scan done, %u device(s) found\n", found);
+  }
+}
+
 void WiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("[WIFI] Disconnected from access point");
   Serial.print("[WIFI] Lost connection. Reason: ");
   Serial.println(info.wifi_sta_disconnected.reason);
-  Serial.println("[WIFI] Trying to reconnect...");
-  WiFi.reconnect();
+  Serial.println("[WIFI] Waiting for auto reconnect...");
 }
 
 void WiFiConnected(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -83,6 +123,9 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   initMqttAfterWifi();
 }
 
+// Runs on the WiFi event task. Must only configure the MQTT client, never
+// touch the network directly -- PubSubClient is not thread-safe and the
+// actual connect happens on loopTask via loopMQTT()/connectMQTT().
 void initMqttAfterWifi() {
   if (mqttInitialized) return;
 
@@ -90,11 +133,16 @@ void initMqttAfterWifi() {
   setupMQTT(espClient, firmware, modeChangedFunction, targetTempChangedFunction, deltaTempChangedFunction,
     offsetWaterChangedFunction, offsetAirChangedFunction, pressureSensorMinVChangedFunction,
     pressureCalibrationFactorChangedFunction);
+  setMqttConnectedCallback(onMqttConnected);
+  mqttInitialized = true;
+}
+
+// Runs on loopTask, right after connectMQTT() succeeds inside loopMQTT().
+void onMqttConnected() {
   Serial.println("[MQTT] Publishing initial preferences");
   publishPreferences(mode, currentValveState, currentPumpState, targetTemp, deltaTemp, offsetWater, offsetAir);
   publishPressureCalibration(filterPressureSensorMinV, filterPressureCalibrationFactor);
   Serial.println("[MQTT] Initialization complete");
-  mqttInitialized = true;
 }
 
 void setupWiFi() {
@@ -115,7 +163,15 @@ void setup() {
   int error;
 
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+  Serial.setTxTimeoutMs(0);
+#endif
   delay(2000);
+
+  const char* resetReason = resetReasonToString(esp_reset_reason());
+  Serial.printf("[PC] Last reset reason: %s\n", resetReason);
+  setResetReason(resetReason); // published via MQTT once connected
+
   loadPressureCalibration();
 
 #if defined(ARDUINO_XIAO_ESP32C6)
@@ -131,6 +187,7 @@ void setup() {
 
   // See http://playground.arduino.cc/Main/I2cScanner how to test for a I2C device.
   Wire.begin();
+  scanI2CBus();
   Wire.beginTransmission(LCD_ADDRESS);
   error = Wire.endTransmission();
   Serial.print("[PC] LCD Probe: ");
@@ -174,8 +231,15 @@ void setup() {
   // Button init
   pcf8575.pinMode(BUTTON_PIN, INPUT_PULLUP); // Set button pin as input with pull-up resistor
 
-  // PCF8575 init
-  pcf8575Initialized = pcf8575.begin();
+  // PCF8575 init. Retry a few times in case the chip / I2C bus wasn't
+  // fully settled yet right after power-on.
+  for (uint8_t attempt = 1; attempt <= 3 && !pcf8575Initialized; attempt++) {
+    pcf8575Initialized = pcf8575.begin();
+    if (!pcf8575Initialized) {
+      Serial.printf("[PC] PCF8575 init attempt %u/3 failed, retrying...\n", attempt);
+      delay(100);
+    }
+  }
   Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X: %s\n",
                 PCF8575_ADDRESS,
                 pcf8575Initialized ? "found" : "not found");
@@ -190,10 +254,15 @@ void setup() {
   // OTA config
   setupOTA(hostname, []() {
         Serial.println("[OTA] Start");
+        esp_task_wdt_reset();
       }, [](unsigned int progress, unsigned int total) {
         Serial.printf("[OTA] Progress: %u%%\r", (progress / (total / 100)));
+        // ArduinoOTA.handle() blocks for the whole transfer, so loop() never
+        // gets back to the top-level feed while an update is running.
+        esp_task_wdt_reset();
       }, []() {
         Serial.println("[OTA] End");
+        esp_task_wdt_reset();
       }, [](ota_error_t error) {
         Serial.printf("[OTA] Error[%u]: ", error);
         if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
@@ -201,10 +270,25 @@ void setup() {
         else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
         else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
         else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        esp_task_wdt_reset();
       });
-  
+
   // Init ESP-NOW
   setupEspnowHandler();
+
+  // Arm the task watchdog last, once all blocking setup work is done, so
+  // only the steady-state loop() is supervised.
+  esp_task_wdt_config_t twdtConfig = {
+    .timeout_ms = TASK_WDT_TIMEOUT_S * 1000,
+    .idle_core_mask = 0,     // only watch the tasks we explicitly add
+    .trigger_panic = true,   // panic -> reboot if not fed in time
+  };
+  if (esp_task_wdt_init(&twdtConfig) == ESP_ERR_INVALID_STATE) {
+    // TWDT already initialized by the framework with its own defaults.
+    esp_task_wdt_reconfigure(&twdtConfig);
+  }
+  esp_task_wdt_add(NULL); // supervise the current task (loopTask)
+  Serial.printf("[WDT] Task watchdog armed (%lus timeout)\n", (unsigned long)TASK_WDT_TIMEOUT_S);
 }  // setup()
 
 unsigned long now;
@@ -215,12 +299,18 @@ void readTemperatures();
 void readFilterPressure();
 void handleModes();
 void refreshDisplay();
+void servicePumpPulse();
 
 void loop() {
+  // Reached the top of loop() again -> we're not stuck, feed the watchdog.
+  esp_task_wdt_reset();
+
   // OTA service loop
   loopOTA();
   // MQTT service loop
   loopMQTT();
+  // Finish any in-progress pump relay pulse (non-blocking, must run every iteration)
+  servicePumpPulse();
   // Espnow service loop
   const uint8_t espnowEvents = loopEspnowHandler();
   if (espnowEvents & ESPNOW_EVENT_BRIDGE_UART) {
@@ -464,6 +554,14 @@ void readFilterPressure() {
 unsigned long lastPumpVelocityChange = 0;
 static bool pumpStateInitialized = false;
 
+// Pump relays are impulse-triggered: pulling one LOW for PUMP_PULSE_DURATION
+// selects that speed level. The pulse is timed via millis() (see
+// servicePumpPulse()) instead of delay() so it doesn't block loop().
+static const unsigned long PUMP_PULSE_DURATION = 2000;
+static bool pumpPulseActive = false;
+static uint8_t pumpPulseRelay = 0;
+static unsigned long pumpPulseStart = 0;
+
 static uint8_t pumpRelayForVelocity(uint8_t velocity) {
   switch (velocity) {
     case 0: return PUMP_OFF;
@@ -476,6 +574,7 @@ static uint8_t pumpRelayForVelocity(uint8_t velocity) {
 
 void handlePumpControl(uint8_t velocity){
   if (!pcf8575Initialized) return;
+  if (pumpPulseActive) return; // previous pulse still in progress
 
   const bool needsInit = !pumpStateInitialized;
   const bool needsChange = currentPumpState != velocity;
@@ -487,6 +586,9 @@ void handlePumpControl(uint8_t velocity){
   pcf8575.digitalWrite(relay, LOW);
   currentPumpState = velocity;
   pumpStateInitialized = true;
+  pumpPulseActive = true;
+  pumpPulseRelay = relay;
+  pumpPulseStart = now;
 
   if (needsInit) {
     Serial.print("[PC] Pump initialized to level...");
@@ -495,18 +597,31 @@ void handlePumpControl(uint8_t velocity){
   }
   Serial.println(currentPumpState);
   publishPumpState(currentPumpState);
+}
 
-  delay(2000);
-  pcf8575.digitalWrite(relay, HIGH);
-  lastPumpVelocityChange = now;
+// Must be called every loop() iteration (not gated behind MEASUREMENT_INTERVAL)
+// so the relay pulse ends after PUMP_PULSE_DURATION regardless of what else is going on.
+void servicePumpPulse() {
+  if (!pumpPulseActive) return;
+  if (millis() - pumpPulseStart < PUMP_PULSE_DURATION) return;
+
+  pcf8575.digitalWrite(pumpPulseRelay, HIGH);
+  pumpPulseActive = false;
+  lastPumpVelocityChange = millis();
 }
 
 unsigned long lastValveMovement = 0;
+// Tracks whether a movement is actually in flight. Comparing millis() against
+// lastValveMovement==0 alone is ambiguous with "no movement yet" right after
+// boot (now - 0 is small too), which used to block all valve/pump actions
+// for the first VALVE_INTERVAL after every boot.
+static bool valveMovementActive = false;
+
 void handleValveAndPumpControl(String position) {
   if (!pcf8575Initialized) return;
 
   Serial.printf("[PC] position: %s, now: %lu, lastValveMovement: %lu\nVALVE_INTERVAL: %lu, currentValveState: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL, currentValveState);
-  if (now - lastValveMovement <= VALVE_INTERVAL)
+  if (valveMovementActive && (now - lastValveMovement <= VALVE_INTERVAL))
   {
     // Valve is still moving
     return;
@@ -522,10 +637,10 @@ void handleValveAndPumpControl(String position) {
       currentValveState = OPEN;
     else if (currentValveState == CLOSING)
       currentValveState = CLOSED;
-    lastValveMovement = 0;
+    valveMovementActive = false;
     Serial.printf("[PC] position: %s, now: %lu, lastValveMovement: %lu, VALVE_INTERVAL: %lu\n", position, now, lastValveMovement, VALVE_INTERVAL);
     Serial.println("Valve movement finished");
-  } 
+  }
 
   if (position == "Pos2") {
       // Activate large loop (solar)
@@ -535,6 +650,7 @@ void handleValveAndPumpControl(String position) {
         pcf8575.digitalWrite(RELAY_POS2, LOW);
         pcf8575.digitalWrite(RELAY_POS4, HIGH); // Disable small loop
         lastValveMovement = now;
+        valveMovementActive = true;
         currentValveState = OPENING;
       }
       handlePumpControl(PUMPLEVEL_FULL); // Oder Stufe2 basierend auf Bedingungen
@@ -546,6 +662,7 @@ void handleValveAndPumpControl(String position) {
         pcf8575.digitalWrite(RELAY_POS4, LOW);
         pcf8575.digitalWrite(RELAY_POS2, HIGH); // Disable large loop
         lastValveMovement = now;
+        valveMovementActive = true;
         currentValveState = CLOSING;
       }
       if (mode == CLEANING)

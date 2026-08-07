@@ -38,13 +38,29 @@ const char* mqtt_topic_GreenhouseTemp = "poolcontrol/GreenhouseTemp";  // Greenh
 const char* mqtt_topic_GreenhouseBattery = "poolcontrol/GreenhouseBattery";  // GreenhouseBattery
 const char* mqtt_topic_GreenhouseFirmware = "poolcontrol/GreenhouseFirmware";  // GreenhouseFirmware
 const char* mqtt_topic_BridgeFirmware = "poolcontrol/BridgeFirmware";  // BridgeFirmware
+const char* mqtt_topic_resetreason = "poolcontrol/resetreason";  // reason for the last boot/reset
 
 
 unsigned long lastMqttReconnectAttempt = 0;
 unsigned long lastWaterLevelCheck = 0;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000; // 5 seconds between reconnect attempts
+static bool mqttConfigured = false;
 
 const char* _firmware;
+static const char* _resetReason = "unknown";
+static void (*_mqttConnectedFunction)(void) = nullptr;
+
+void setResetReason(const char* reason) {
+  _resetReason = reason;
+}
+
+// Called once from connectMQTT() right after a successful connect.
+// connectMQTT() only ever runs on loopTask (via loopMQTT()), so this
+// callback is safe to use for one-time post-connect work (e.g. publishing
+// retained state) without touching the PubSubClient from another task.
+void setMqttConnectedCallback(void (*callback)(void)) {
+  _mqttConnectedFunction = callback;
+}
 void (*_modeChangedFunction)(Mode mode);  
 void (*_targetTempChangedFunction)(float targetTemp);
 void (*_deltaTempChangedFunction)(float deltaTemp);
@@ -91,6 +107,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 bool connectMQTT() {
+  if (!mqttConfigured || WiFi.status() != WL_CONNECTED) {
+    return false;
+  }
+
   if (mqtt.connected()) {
     return true;
   }
@@ -114,6 +134,7 @@ bool connectMQTT() {
     // publish Online State
     mqtt.publish(mqtt_topic_state, "online", true);
     mqtt.publish(mqtt_topic_firmware, _firmware, true); // firmware
+    mqtt.publish(mqtt_topic_resetreason, _resetReason, true); // why the device last booted
     mqtt.subscribe(mqtt_topic_set_mode);
     mqtt.subscribe(mqtt_topic_set_targetTemp);
     mqtt.subscribe(mqtt_topic_set_deltaTemp);
@@ -151,6 +172,10 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_GreenhouseFirmware.c_str(), mqtt_ha_config_GreenhouseFirmware, true);
     mqtt.publish(mqtt_topic_ha_BridgeFirmware.c_str(), mqtt_ha_config_BridgeFirmware, true);
     Serial.println("[MQTT] <-- HA Config");
+
+    if (_mqttConnectedFunction) {
+      _mqttConnectedFunction();
+    }
 
     return true;
   } else {
@@ -358,7 +383,7 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
     void (*offsetAirChangedFunction)(float offsetAir),
     void (*pressureSensorMinVChangedFunction)(float sensorMinV),
     void (*pressureCalibrationFactorChangedFunction)(float calibrationFactor)) 
-{
+	{
     _modeChangedFunction = modeChangedFunction;
     _targetTempChangedFunction = targetTempChangedFunction;
     _deltaTempChangedFunction = deltaTempChangedFunction;
@@ -366,16 +391,23 @@ void setupMQTT(WiFiClient& espClient, const char* firmware,
     _offsetAirChangedFunction = offsetAirChangedFunction;
     _pressureSensorMinVChangedFunction = pressureSensorMinVChangedFunction;
     _pressureCalibrationFactorChangedFunction = pressureCalibrationFactorChangedFunction;
-    _firmware = firmware;
+	    _firmware = firmware;
     mqtt.setClient(espClient);
     mqtt.setServer(mqtt_server, mqtt_port);
-    Serial.println("[MQTT] Server: " + String(mqtt_server) + ":" + String(mqtt_port));
     mqtt.setCallback(mqttCallback);
-    connectMQTT();
+    Serial.println("[MQTT] Server: " + String(mqtt_server) + ":" + String(mqtt_port));
+    // Actual connecting happens exclusively from loopMQTT() (loopTask).
+    // setupMQTT() itself may run on the WiFi event task, and PubSubClient
+    // is not thread-safe, so it must never touch the network here.
+    mqttConfigured = true;
     Serial.println("[MQTT] Setup done");
 }
 
 void loopMQTT() {
+  if (!mqttConfigured || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
   // check MQTT connect and reconnect if necessary
   if (!mqtt.connected()) {
     unsigned long now = millis();

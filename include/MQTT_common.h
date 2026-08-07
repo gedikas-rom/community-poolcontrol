@@ -23,3 +23,5 @@ void publishPressureCalibration(float sensorMinV, float calibrationFactor);
 void publishPavilionSensorData(float temp, int battery, const char* firmware);
 void publishGreenhouseSensorData(float temp, int battery, const char* firmware);
 void publishBridgeFirmware(const char* firmware);
+void setResetReason(const char* reason);
+void setMqttConnectedCallback(void (*callback)(void));
