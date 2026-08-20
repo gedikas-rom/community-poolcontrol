@@ -24,4 +24,5 @@ void publishPavilionSensorData(float temp, int battery, const char* firmware);
 void publishGreenhouseSensorData(float temp, int battery, const char* firmware);
 void publishBridgeFirmware(const char* firmware);
 void setResetReason(const char* reason);
+void setIoExpanderStatus(bool initialized, const char* scannedAddresses);
 void setMqttConnectedCallback(void (*callback)(void));

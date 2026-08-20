@@ -39,6 +39,8 @@ const char* mqtt_topic_GreenhouseBattery = "poolcontrol/GreenhouseBattery";  // 
 const char* mqtt_topic_GreenhouseFirmware = "poolcontrol/GreenhouseFirmware";  // GreenhouseFirmware
 const char* mqtt_topic_BridgeFirmware = "poolcontrol/BridgeFirmware";  // BridgeFirmware
 const char* mqtt_topic_resetreason = "poolcontrol/resetreason";  // reason for the last boot/reset
+const char* mqtt_topic_io_expander_status = "poolcontrol/io_expander_status";  // PCF8575 init status
+const char* mqtt_topic_io_expander_address = "poolcontrol/io_expander_address";  // I2C address(es) found on the bus at boot
 
 
 unsigned long lastMqttReconnectAttempt = 0;
@@ -48,10 +50,21 @@ static bool mqttConfigured = false;
 
 const char* _firmware;
 static const char* _resetReason = "unknown";
+static bool _ioExpanderInitialized = false;
+static String _ioExpanderScannedAddresses = "unknown";
 static void (*_mqttConnectedFunction)(void) = nullptr;
 
 void setResetReason(const char* reason) {
   _resetReason = reason;
+}
+
+// Captured once in setup() right after the PCF8575 init attempts, published
+// once connectMQTT() succeeds (mirrors setResetReason()) so an I2C
+// address/wiring problem is visible in Home Assistant instead of only in
+// the serial log.
+void setIoExpanderStatus(bool initialized, const char* scannedAddresses) {
+  _ioExpanderInitialized = initialized;
+  _ioExpanderScannedAddresses = scannedAddresses;
 }
 
 // Called once from connectMQTT() right after a successful connect.
@@ -135,6 +148,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_state, "online", true);
     mqtt.publish(mqtt_topic_firmware, _firmware, true); // firmware
     mqtt.publish(mqtt_topic_resetreason, _resetReason, true); // why the device last booted
+    mqtt.publish(mqtt_topic_io_expander_status, _ioExpanderInitialized ? "OK" : "NICHT GEFUNDEN", true);
+    mqtt.publish(mqtt_topic_io_expander_address, _ioExpanderScannedAddresses.c_str(), true);
     mqtt.subscribe(mqtt_topic_set_mode);
     mqtt.subscribe(mqtt_topic_set_targetTemp);
     mqtt.subscribe(mqtt_topic_set_deltaTemp);
@@ -171,6 +186,8 @@ bool connectMQTT() {
     mqtt.publish(mqtt_topic_ha_GreenhouseBattery.c_str(), mqtt_ha_config_GreenhouseBattery, true);
     mqtt.publish(mqtt_topic_ha_GreenhouseFirmware.c_str(), mqtt_ha_config_GreenhouseFirmware, true);
     mqtt.publish(mqtt_topic_ha_BridgeFirmware.c_str(), mqtt_ha_config_BridgeFirmware, true);
+    mqtt.publish(mqtt_topic_ha_IoExpanderStatus.c_str(), mqtt_ha_config_IoExpanderStatus, true);
+    mqtt.publish(mqtt_topic_ha_IoExpanderAddress.c_str(), mqtt_ha_config_IoExpanderAddress, true);
     Serial.println("[MQTT] <-- HA Config");
 
     if (_mqttConnectedFunction) {

@@ -35,6 +35,10 @@ void initMqttAfterWifi();
 void onMqttConnected();
 void loadPressureCalibration();
 void savePressureCalibration();
+void loadTargetTemp();
+void loadDeltaTemp();
+void loadOffsetWater();
+void loadOffsetAir();
 
 static bool mqttInitialized = false;
 static bool lcdInitialized = false;
@@ -45,6 +49,10 @@ static Preferences preferences;
 static const char* preferencesNamespace = "poolcontrol";
 static const char* prefPressureMinV = "press_min_v";
 static const char* prefPressureFactor = "press_factor";
+static const char* prefTargetTemp = "target_temp";
+static const char* prefDeltaTemp = "delta_temp";
+static const char* prefOffsetWater = "offset_water";
+static const char* prefOffsetAir = "offset_air";
 
 // XIAO ESP32-C6 RF switch pins:
 // GPIO3  -> WiFi function enable (LOW = enabled)
@@ -68,20 +76,29 @@ static const char* resetReasonToString(esp_reset_reason_t reason) {
   }
 }
 
+// Addresses found during the boot-time I2C scan, published via MQTT so an
+// address/wiring mismatch (e.g. PCF8575 not answering at the compiled-in
+// PCF8575_ADDRESS) is visible in Home Assistant without a serial monitor.
+static String i2cScanResult = "keine Geraete gefunden";
+
 static void scanI2CBus() {
   Serial.println("[PC] I2C bus scan...");
-  uint8_t found = 0;
+  String found;
   for (uint8_t address = 1; address < 127; address++) {
     Wire.beginTransmission(address);
     if (Wire.endTransmission() == 0) {
       Serial.printf("[PC] I2C device found at address 0x%02X\n", address);
-      found++;
+      char addressStr[6];
+      snprintf(addressStr, sizeof(addressStr), "0x%02X", address);
+      if (found.length() > 0) found += ", ";
+      found += addressStr;
     }
   }
-  if (found == 0) {
+  if (found.length() == 0) {
     Serial.println("[PC] I2C scan: no devices found");
   } else {
-    Serial.printf("[PC] I2C scan done, %u device(s) found\n", found);
+    Serial.printf("[PC] I2C scan done: %s\n", found.c_str());
+    i2cScanResult = found;
   }
 }
 
@@ -173,6 +190,10 @@ void setup() {
   setResetReason(resetReason); // published via MQTT once connected
 
   loadPressureCalibration();
+  loadTargetTemp();
+  loadDeltaTemp();
+  loadOffsetWater();
+  loadOffsetAir();
 
 #if defined(ARDUINO_XIAO_ESP32C6)
   pinMode(XIAO_C6_WIFI_ENABLE_PIN, OUTPUT);
@@ -243,6 +264,7 @@ void setup() {
   Serial.printf("[PC] Init IO Expander for PCF8575 on address 0x%02X: %s\n",
                 PCF8575_ADDRESS,
                 pcf8575Initialized ? "found" : "not found");
+  setIoExpanderStatus(pcf8575Initialized, i2cScanResult.c_str()); // published via MQTT once connected
   // Pressure sensor ADC input
   pinMode(FILTER_PRESSURE_PIN, INPUT);
 
@@ -361,8 +383,63 @@ void targetTempChangedFunction(float incomingTargetTemp) {
   if (incomingTargetTemp >= 10 && incomingTargetTemp <= 35)
   {
     targetTemp = incomingTargetTemp;
+    preferences.begin(preferencesNamespace, false);
+    preferences.putFloat(prefTargetTemp, targetTemp);
+    preferences.end();
     publishTargetTemp(targetTemp);
   }
+}
+
+// Restores the last user-set target temperature so it survives a reboot
+// instead of onMqttConnected() re-publishing the compile-time default and
+// overwriting the retained value in MQTT/Home Assistant.
+void loadTargetTemp() {
+  preferences.begin(preferencesNamespace, true);
+  targetTemp = preferences.getFloat(prefTargetTemp, targetTemp);
+  preferences.end();
+
+  if (targetTemp < 10 || targetTemp > 35) {
+    targetTemp = 25.0f;
+  }
+
+  Serial.printf("[PC] Target temperature loaded: %.1f\n", targetTemp);
+}
+
+// See loadTargetTemp() -- same reasoning applies to deltaTemp/offsetWater/offsetAir.
+void loadDeltaTemp() {
+  preferences.begin(preferencesNamespace, true);
+  deltaTemp = preferences.getFloat(prefDeltaTemp, deltaTemp);
+  preferences.end();
+
+  if (deltaTemp <= 0 || deltaTemp > 10) {
+    deltaTemp = 2.0f;
+  }
+
+  Serial.printf("[PC] Delta temperature loaded: %.1f\n", deltaTemp);
+}
+
+void loadOffsetWater() {
+  preferences.begin(preferencesNamespace, true);
+  offsetWater = preferences.getFloat(prefOffsetWater, offsetWater);
+  preferences.end();
+
+  if (offsetWater < -5 || offsetWater > 5) {
+    offsetWater = 1.5f;
+  }
+
+  Serial.printf("[PC] Offset water temperature loaded: %.1f\n", offsetWater);
+}
+
+void loadOffsetAir() {
+  preferences.begin(preferencesNamespace, true);
+  offsetAir = preferences.getFloat(prefOffsetAir, offsetAir);
+  preferences.end();
+
+  if (offsetAir < -5 || offsetAir > 5) {
+    offsetAir = 0.0f;
+  }
+
+  Serial.printf("[PC] Offset air temperature loaded: %.1f\n", offsetAir);
 }
 
 void deltaTempChangedFunction(float incomingDeltaTemp) {
@@ -370,6 +447,9 @@ void deltaTempChangedFunction(float incomingDeltaTemp) {
   if (incomingDeltaTemp > 0 && incomingDeltaTemp <= 10)
   {
     deltaTemp = incomingDeltaTemp;
+    preferences.begin(preferencesNamespace, false);
+    preferences.putFloat(prefDeltaTemp, deltaTemp);
+    preferences.end();
     publishDeltaTemp(deltaTemp);
   }
 }
@@ -379,6 +459,9 @@ void offsetWaterChangedFunction(float incomingOffsetWater) {
   if (incomingOffsetWater >= -5 && incomingOffsetWater <= 5)
   {
     offsetWater = incomingOffsetWater;
+    preferences.begin(preferencesNamespace, false);
+    preferences.putFloat(prefOffsetWater, offsetWater);
+    preferences.end();
     publishOffsetWater(offsetWater);
   }
 }
@@ -388,6 +471,9 @@ void offsetAirChangedFunction(float incomingOffsetAir) {
   if (incomingOffsetAir >= -5 && incomingOffsetAir <= 5)
   {
     offsetAir = incomingOffsetAir;
+    preferences.begin(preferencesNamespace, false);
+    preferences.putFloat(prefOffsetAir, offsetAir);
+    preferences.end();
     publishOffsetAir(offsetAir);
   }
 }

@@ -32,6 +32,8 @@ std::string mqtt_topic_ha_GreenhouseTemp = std::string(mqtt_topic_ha_base) + "/s
 std::string mqtt_topic_ha_GreenhouseBattery = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseBattery/config";
 std::string mqtt_topic_ha_GreenhouseFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/GreenhouseFirmware/config";
 std::string mqtt_topic_ha_BridgeFirmware = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/BridgeFirmware/config";
+std::string mqtt_topic_ha_IoExpanderStatus = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/io_expander_status/config";
+std::string mqtt_topic_ha_IoExpanderAddress = std::string(mqtt_topic_ha_base) + "/sensor/poolcontrol/io_expander_address/config";
 
 
 const char* mqtt_ha_config_firmware = R"rawliteral({
@@ -828,5 +830,65 @@ const char* mqtt_ha_config_BridgeFirmware = R"rawliteral({
   },
   "state_topic": "poolcontrol/BridgeFirmware",
   "unique_id": "poolcontrol_BridgeFirmware",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_IoExpanderStatus = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "entity_category": "diagnostic",
+  "icon": "mdi:chip",
+  "name": "IO-Expander Status",
+  "object_id": "poolcontrol_IoExpanderStatus",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/io_expander_status",
+  "unique_id": "poolcontrol_IoExpanderStatus",
+  "value_template": "{{ value }}"
+})rawliteral";
+
+const char* mqtt_ha_config_IoExpanderAddress = R"rawliteral({
+  "availability": [
+    {
+      "topic": "poolcontrol/state"
+    }
+  ],
+  "availability_mode": "all",
+  "device": {
+    "identifiers": [
+      "poolcontrol"
+    ],
+    "manufacturer": "Ron",
+    "model": "PoolControl V1",
+    "name": "Poolcontrol"
+  },
+  "enabled_by_default": true,
+  "entity_category": "diagnostic",
+  "icon": "mdi:memory",
+  "name": "I2C-Adressen (Scan)",
+  "object_id": "poolcontrol_IoExpanderAddress",
+  "origin": {
+    "name": "ESP32-C6",
+    "sw": "1.0.0",
+    "url": "https://wiki.seeedstudio.com/xiao_pin_multiplexing_esp33c6"
+  },
+  "state_topic": "poolcontrol/io_expander_address",
+  "unique_id": "poolcontrol_IoExpanderAddress",
   "value_template": "{{ value }}"
 })rawliteral";
